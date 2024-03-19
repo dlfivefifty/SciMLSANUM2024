@@ -1,0 +1,7 @@
+name = "SciMLSANUM2024"
+uuid = "b73f9a58-1942-4643-9b0a-29dd2ad74e71"
+authors = ["Sheehan Olver <solver@mac.com>"]
+version = "0.1.0"
+
+[deps]
+Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
