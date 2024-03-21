@@ -49,3 +49,21 @@ end
 
 
 derivative(pendulumfriction, 1.0)
+
+using Zygote
+
+function pendulum(du, u, τ, t)
+    du[1] = u[2]
+    du[2] = -sin(u[1]) - τ[1]*u[2]
+end
+
+function pendulumfriction(τ)
+    T = 10.0 # final time
+    u₀, v₀ = 1.0,1.0
+    prob = ODEProblem(pendulum, [u₀, v₀], (0.0, T), τ)
+    sol = solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10)
+    sol[end][1]
+end
+
+
+Zygote.gradient(pendulumfriction, [1.0])

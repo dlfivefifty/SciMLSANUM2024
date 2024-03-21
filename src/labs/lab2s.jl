@@ -220,6 +220,96 @@ contdual.b
 
 
 
+
+
+# ## Gradients
+
+
+# **Problem 2.2 (A)** Consider a 2D version of a dual number:
+# $$
+# a + b ϵ_x + c ϵ_y
+# $$
+# such that
+# $$
+# ϵ_x^2 = ϵ_y^2 = ϵ_x ϵ_y =  0.
+# $$
+# Complete the following implementation supporting `+` and `*` (and
+# assuming `a,b,c` are `Float64`). Hint: you may need to work out on paper
+# how to multiply `(s.a + s.b ϵ_x + s.c ϵ_y)*(t.a + t.b ϵ_x + t.c ϵ_y)` using the
+# relationship above.
+
+import Base: *, +, ^
+struct Dual2D
+    a::Float64
+    b::Float64
+    c::Float64
+end
+
+
+function +(s::Dual2D, t::Dual2D)
+    ## TODO: Implement +, returning a Dual2D
+end
+
+function *(c::Number, s::Dual2D)
+    ## TODO: Implement c * Dual2D(...), returning a Dual2D
+    
+end
+
+function *(s::Dual2D, t::Dual2D)
+    ## TODO: Implement Dual2D(...) * Dual2D(...), returning a Dual2D
+    
+    
+end
+
+f = function (x, y) # (x+2y^2)^3 using only * and +
+    z = (x + 2y * y)
+    z * z * z
+end
+
+x,y = 1., 2.
+@test f(Dual2D(x,1.,0.), Dual2D(y,0.,1.)) == Dual2D(f(x,y), 3(x+2y^2)^2, 12y*(x+2y^2)^2)
+
+# This has computed the gradient as f(x,y) + f_x*ϵ_x + f_y*ϵ_y
+# == (x+2y^2)^3 + 3(x+2y^2)^2*ϵ_x + 12y(x+2y^2)^2*ϵ_y
+
+# ##
+
+# ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation. 
+
+using ForwardDiff, Test
+
+@test ForwardDiff.derivative(cos, 0.1) ≈ -sin(0.1) # uses dual number
+
+# It also works with higher dimensions,  allowing for arbitrary dimensional computation
+# of gradients. Consider a simple function:
+
+f = function(x)
+    ret = zero(eltype(x))
+    for k = 1:length(x)-1
+        ret += x[k]*x[k+1]
+    end
+    ret
+end
+
+f = function(x)
+    ret = zero(eltype(x))
+    for k = 1:length(x)-1
+        ret += x[k]^2
+    end
+    ret
+end
+
+x = randn(5)
+ForwardDiff.gradient(f,x)
+
+# The one catch is the complexity is quadratic:
+
+@time ForwardDiff.gradient(f,randn(1000));
+@time ForwardDiff.gradient(f,randn(10_000)); # around 100x slower
+
+
+# This will motivate the move to reverse-mode automatic differentiation.
+
 # ## I.4 Newton's method
 
 # Newton's method is a simple algorithmic approach that you may have seen before in school for computing roots (or zeros)
