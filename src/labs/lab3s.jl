@@ -12,7 +12,7 @@
 # 1. Basics of reverse-mode automatic differentiation and pullbacks.
 # 2. Implementation via Zygote.jl
 # 3. Adding custom pullbacks.
-
+# 4. Using automatic differentiation for implementing gradient descent.
 
 
 using Zygote
@@ -71,7 +71,7 @@ sin_J(1)
 # The reason its a map instead of a function becomes important for composing functions. Lets consider
 # a composition of three functions:
 # $$
-# f(g(h(x)) = f'(g(h(x)) g'(h(x)) h'(x)
+# {\rm d} \over {\rm d x}[f(g(h(x))] = f'(g(h(x)) g'(h(x)) h'(x)
 # $$
 # Essentially we have three pullbacks: the first is the pullback of $h$ evaluated
 # at $x$, the second corresponding to $g$ evaluated at $h(x)$, and the third 
@@ -148,7 +148,48 @@ end
 # ## Gradients
 #
 # Above we introduced  scalar. Now we consider computing gradients, which is
-# essential in ML. 
+# essential in ML. Consider a now $f : ℝ^ℓ → ℝ^m$, $g : ℝ^m → ℝ^n$ and $h : ℝ^n → ℝ$.
+# Denote the Jacobian as
+# $$
+#  J_f = \begin{bmatrix} {∂ f_1 \over ∂x_1} & ⋯ & {∂ f_1 \over ∂x_ℓ} \\
+#       ⋮ & ⋱ & ⋮ \\
+#       {∂ f_m \over ∂x_1} & ⋯ & {∂ f_m \over ∂x_ℓ} 
+# \end{bmatrix}
+# $$
+# The Chain rule tells us that
+# $$
+#  J_{h ∘ g ∘ f}(𝐱) = J_h(g(f(𝐱)) J_g(f(𝐱)) J_f(𝐱)
+# $$
+# Note that gradients are the transpose of Jacobians: $∇h = J_h^⊤$. Put another way, the gradiant of $h ∘ g ∘ f$
+# is given by the transposes of Jacobians:
+# $$
+#    ∇[{h ∘ g ∘ f}](𝐱) = J_f(𝐱)^⊤ J_g(f(𝐱))^⊤  ∇h(g(f(𝐱))
+# $$
+# We can compute this using pullbacks. 
+
+f = function(𝐱)
+    x,y,z = 𝐱
+    [exp(x*y*z),cos(x*y+z)]
+end
+     
+
+𝐱 = [0.1,0.2,0.3]
+f_v, f_pb =  pullback(f, 𝐱)
+
+J_f = function(𝐱)
+    x,y,z = 𝐱
+    [y*z*exp(x*y*z) x*z*exp(x*y*z) x*y*exp(x*y*z);
+     -y*sin(x*y+z) -x*sin(x*y+z) -sin(x*y+z)]
+end
+
+𝐲 = [1,2]
+@test J_f(𝐱)'*𝐲 ≈ f_pb(𝐲)[1]
+
+
+# Here the "right" order to do the multiplications is clear: matrix-matrix multiplications are expensive
+# so its best to reverse order:
+
+
 
 z,pb = rrule(sum, [1, 2])
 

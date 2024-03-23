@@ -18,7 +18,7 @@
 # 1. Definition and implementation of dual numbers and functions applied dual numbers.
 # 2. Using automatic differentiation to implement Newton's method
 # 3. Extension to gradients as implemented in ForwardDiff.jl
-# 4. Using automatic differentiation for implementing gradient descent.
+
 
 # ## 2.1 Dual numbers
 
