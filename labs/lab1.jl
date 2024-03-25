@@ -1,6 +1,19 @@
 # # SciML SANUM2024
 # # Lab 1: Introduction to Julia
 
+
+# In this course we will use the programming language Julia. This is a modern, compiled, 
+# high-level, open-source language developed at MIT. It is becoming increasingly 
+# important in high-performance computing and AI, including by Astrazeneca, Moderna and 
+# Pfizer in drug development and clinical trial accelleration, IBM for medical diagnosis, 
+# MIT for robot locomotion, and elsewhere.
+
+# It is ideal for a course on Scientific Machine Learning (SciML)  because it both allows fast 
+# implementation of algorithms but also has support for fast automatic-differentiation, 
+# a feature that is of increasing importance in machine learning. 
+# Also, the libraries for solving differential equations and SciML are quite advanced.
+# As a bonus, it is easy-to-read and fun to write.
+
 # This first lab introduces the basics of Julia and some of its unique features in terms of creating custom types.
 # This will become valuable in implementing automatic-differentiation for generic code, a feature that
 # is particularly useful for SciML as it allows combining neural networks with general time-steppers.
@@ -13,9 +26,14 @@
 # 4. Overloading functions like `+`, `*`, and `exp` for a custom type.
 # 5. Construction of a dense `Vector` or `Matrix` either directly or via comprehensions or broadcasting.
 
+# In what follows we need to use the testing package, which provides a macro called `@test`
+# that error whenever a test returns false. We load thisas follows:
+
+using Test
+
 # ## 1.1 Functions in Julia
 
-# Functions are created in a number of ways.
+# We begin with creating functions, which can be done in a number of ways.
 # The most standard way is using the keyword `function`, 
 # followed by a name for the function, 
 # and in parentheses a list of arguments.  
@@ -33,12 +51,6 @@ sq(2), sq(3)
 
 sq(x) = x^2
 
-# Julia is a compiled language: the first time we run a command on a specific type it compiles for that type.
-# The second time it is called on a type it reuses the precompiled function:
-
-@time sq(5) # Already compiled for Int so very fast
-@time sq(1.3) # Needs to recompile for Float64 (the typeof of `1.3`) so takes extra time to compile
-@time sq(5.6) # It reuses the compiled code from the previous call
 
 
 # Multiple arguments to the function can be included with `,`.  
@@ -52,11 +64,12 @@ function av(x, y, z)
 end
 av(1, 2, 3)
 
-# Variables live in different scopes.  In the previous example, `x`, `y`, `z` and `ret` are _local variables_: 
-# they only exist inside of `av`.  
-# So this means `x` and `z` are _not_ the same as our complex number `x` and `z` defined above.
+# **Remark**: Julia is a compiled language: the first time we run a command on a specific type it compiles for that type.
+# The second time it is called on a type it reuses the precompiled function.
 
-# **Warning**: if you reference variables not defined inside the function, they will use the outer scope definition.  
+#  **Warning**: Variables live in different scopes.  In the previous example, `x`, `y`, `z` and `ret` are _local variables_: 
+# they only exist inside of `av`.  
+# If you reference variables not defined inside the function, they will use the outer scope definition.  
 # The following example shows that if we mistype the first argument as `xx`, 
 # then it takes on the outer scope definition `x`, which is a complex number:
 
@@ -64,29 +77,39 @@ av(1, 2, 3)
 function av2(xx, y, z)
     (x + y + z)/3
 end
+x = 5
+av2(2, 2, 2) # uses x = 5 from outside function
 
-# You should almost never use this feature!!  
-# We should ideally be able to predict the output of a function from knowing just the inputs.
+# You should avoid using global variables:
+# we should ideally be able to predict the output of a function from knowing just the inputs.
+# This also leads to faster code as the compiler can know the type of the variable.
 
-# **Example**
-# Let's create a function that calculates the average of the entries of a vector.  
 
-function vecaverage(v)
-    ret = 0
-    for k = 1:length(v)
-        ret = ret + v[k]
+# Here is an example of a more complicated function that computes
+# the _(right-sided) rectangular rule_
+# for approximating an integral: choose $n$ large so that
+# $$
+#   ∫_0^1 f(x) {\rm d}x ≈ {1 \over n} ∑_{j=1}^n f(j/n).
+# $$
+# It demonstrates that functions can take in  other functions as inputs
+# and shows the syntax for a for-loop:
+
+function rightrectangularrule(f, n) # create a function named "rightrectangularrule" that takes in two arguments
+    ret = 0.0
+    for j = 1:n
+        ret = ret + f(j/n) # now `f` is the input function
     end
-    ret/length(v)
-end
-vecaverage([1,5,2,3,8,2])
+    ret/n   # the last line of a function is returned
+end # like for-loops, functions are finished with an end
 
-# Julia has an inbuilt `sum` command that we can use to check our code:
+rightrectangularrule(exp, 100_000_000) # Use n = 100 million points to get an approximation accurate to 8 digits.
+                                      ## The underscores in numbers are like commas and are ignored.
 
-sum([1,5,2,3,8,2])/6
+
 
 # ### Anonymous (lambda) functions
 
-# Just like Python it is possible to make anonymous functions,
+# It is possible to make unnamed anonymous functions,
 # with two variants on syntax:
 
 f = x -> x^2
@@ -100,10 +123,36 @@ end
 # named functions as "global constant anonymous functions".
 
 
+
+
+# ----
+
+# **Problem 1(a)** Complete the following function `leftrectangularrule(f, n)` That approximates
+# an integral using the left-sided rectangular rule:
+# $$
+#   ∫_0^1 f(x) {\rm d}x ≈ {1 \over n} ∑_{j=0}^{n-1} f(j/n).
+# $$
+
+using Test # Loads `@test` again in case you didn't run the line above.
+
+function leftrectangularrule(f, n)
+    ## TODO: return (1/n) * ∑_{j=0}^{n-1} f(j/n) computed using a for-loop
+    
+end
+
+@test leftrectangularrule(exp, 1000) ≈ exp(1) - 1 atol=1E-3 # tests that the approximation is accurate to 3 digits after the decimal point
+
+# **Problem 1(b)** Use an anonymous function as input for `lefrectangularrule` to approximate
+# the integral of $\cos x^2$ on $[0,1]$ to 5 digits.
+
+## TODO: use an anonymous function to represent the function cos(x^2) and approximate its integral.
+
+leftrectangularrule(x -> cos(x^2), 10_000_000) # 0.9045242608850343
+# ----
+
 # ## 1.2 Types in Julia
 
 
-# Before we can use a concept like dual numbers we have to understand the notion of a "type".
 # In compiled languages like Julia everything has a "type". The function `typeof` can be used to determine the type of,
 # for example, a number.
 # By default when we write an integer (e.g. `-123`) it is of type `Int`:
@@ -111,15 +160,13 @@ end
 typeof(5)
 
 # On a 64-bit machine this will print `Int64`, where the `64` indicates it is using precisely 64 bits
-# to represent the number (a topic we will come back to in Part II). If we write something with
+# to represent the number. If we write something with
 # a decimal point it represents a "real" number, whose storage is of type `Float64`:
 
 typeof(5.3)
 
-# This is called a "floating point" number, and again the `64` indicates it is using precisely
-# 64 bits to represent this number. (We will see this is why computations like divided differences
-# have large errors: because we are limiting the number of "digits" to represent numbers we need to
-# round our computations.) Note that some operations involving `Int`s return `Float64`s:
+# This is  a floating point number, and again the `64` indicates it is using precisely
+# 64 bits to represent this number. Note that some operations involving `Int`s return `Float64`s:
 
 1/5 # 1 and 5 are Int but output is a Float64
 
@@ -131,7 +178,7 @@ typeof(5.3)
 foo(x::Int) = 1 # The ::Int means this version is called when the input is an Int
 foo(x::Float64) = 0
 foo(x) = -1 # This is equivalent to f(x::Any) = -1
-            # Anything that is not an Int or Float64 will call this
+            ## Anything that is not an Int or Float64 will call this
 
 foo(3), foo(2.5), foo("hi"), foo(3.0)
 
@@ -140,10 +187,6 @@ foo(3), foo(2.5), foo("hi"), foo(3.0)
 # Note that there is a difference between an "integer" and the type `Int`: whilst 3.0 is an integer
 # its type is `Float64` so `foo(3.0) == 0`.
 
-# **Remark** Every type has a "supertype", which is an "abstract type": something you can't make an instance of it.
-# For example, in the same way that "integers"
-# are subsets of the "reals" we have that `Int` and `Float64` are subtypes of
-# `Real`. Which is a subtype of `Number`. Which, as is everything, a subtype of `Any`.
 
 # Types allow for combining multiple numbers (or instances of other types) to represent a more complicated
 # object. A simple example of this is a complex number,
@@ -167,14 +210,27 @@ typeof(z)
 
 exp(2z^2 + 3im)
 
+# ### Supertypes
+
+# Every type has a "supertype", which is an "abstract type": something you can't make an instance of it.
+# For example, in the same way that "integers"
+# are subsets of the "reals" we have that `Int` and `Float64` are subtypes of
+# `Real`. Which is a subtype of `Number`. Which, as is everything, a subtype of `Any`. We can see this with the
+# `supertype` function:
+
+@show supertype(Float64) # AbstractFloat, representing general floats
+@show supertype(AbstractFloat) # Real, representing real numbers
+@show supertype(Real)
+@show supertype(Number); # Any, the supertype of all types.
+
 # -----
-# **Problem 1(a)** Use `typeof` to determine the type of `1.2 + 2.3im`.
+# **Problem 2(a)** Use `typeof` to determine the type of `1.2 + 2.3im`.
 
 ## TODO: What is the type of `1.2 + 2.3im`?
 
 
 
-# **Problem 1(b)** Add another implementation of `foo` that returns `im` if the input
+# **Problem 2(b)** Add another implementation of `foo` that returns `im` if the input
 # is a `ComplexF64`.
 
 ## TODO: Overload foo for when the input is a ComplexF64 and return im
@@ -182,9 +238,8 @@ exp(2z^2 + 3im)
 
 @test foo(1.1 + 2im) == im
 
-# ------
 
-# **Problem 2(a)** Consider the Taylor series approximation to the exponential:
+# **Problem 3** Consider the Taylor series approximation to the exponential:
 # $$
 # \exp z ≈ ∑_{k=0}^n {z^k \over k!}
 # $$
@@ -207,6 +262,8 @@ end
 
 @test exp_t(1.0, 100) ≈ exp(1)
 
+
+# ------
 
 # ### Making our own Types
 
@@ -260,7 +317,7 @@ Rat(1,2) + 1  # 1 + 1/2 == 3/2
 
 # -----
 
-# **Problem 3** Support `*`, `-`, `/`, and `==` for `Rat` and `Int`.
+# **Problem 4** Support `*`, `-`, `/`, and `==` for `Rat` and `Int`.
 
 ## We import `+`, `-`, `*`, `/` so we can "overload" these operations
 ## specifically for `Rat`.
@@ -335,12 +392,12 @@ A[1,2] = 2.3 # fails since 2.3 is a Float64 that cannot be converted to an Int
 
 
 # ------
-# **Problem 1(a)** Create a 5×6 matrix whose entries are `Int` which is
+# **Problem 5(a)** Create a 5×6 matrix whose entries are `Int` which is
 # one in all entries. Hint: use a for-loop, `ones`, `fill`, or a comprehension.
 ## TODO: Create a matrix of ones, 4 different ways
 
 
-# **Problem 1(b)** Create a 1 × 5 `Matrix{Int}` with entries `A[k,j] = j`. Hint: use a for-loop or a comprehension.
+# **Problem 5(b)** Create a 1 × 5 `Matrix{Int}` with entries `A[k,j] = j`. Hint: use a for-loop or a comprehension.
 
 ## TODO: Create a 1 × 5  matrix whose entries equal the column, 2 different ways
 
@@ -445,33 +502,30 @@ r[2] = 3   # Not allowed
 
 # -----
 
-# **Problem 1(c)** Create a vector of length 5 whose entries are `Float64`
+# **Problem 5(c)** Create a vector of length 5 whose entries are `Float64`
 # approximations of `exp(-k)`. Hint: use a for-loop, broadcasting `f.(x)` notation, or a comprehension.
 ## TODO: Create a vector whose entries are exp(-k), 3 different ways
 
 
 # ### Linear algebra
 
-# A `Vector` stores its entries consecutively in memory.
-# To be perhaps overly technical: a `Vector` contains a "pointer" (an integer)
-# to the first memory address and a length. A `Matrix` is also stored consecutively in memory
-#  going down column-by-
-# column (_column-major_). That is,
+# Matrix-vector multiplication works as expected because `*` is overloaded:
 
 A = [1 2;
      3 4;
      5 6]
-
-# Is actually stored equivalently to a length `6` vector `[A[1,1],A[2,1],A[3,1],A[1,2],A[2,2],A[3,2]]`:
-
-vec(A)
-
-# which in this case would be stored using `8 * 6 = 48` consecutive bytes.
-# Behind the scenes, a matrix is also "pointer" to the location of the first entry alongside two integers
-# dictating the row and column sizes.
-
-
-# Matrix-vector multiplication works as expected because `*` is overloaded:
-
 x = [7, 8]
 A * x
+
+# We can also solve least squares problems using `\`:
+
+b = randn(3)
+A \ b # finds x that minimises norm(A*x - b)
+
+# When a matrix is square, `\` reduces to a linear solve.
+
+A = randn(5,5)
+b = randn(5)
+x = A \ b
+
+@test A*x ≈ b

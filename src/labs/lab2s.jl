@@ -7,17 +7,18 @@
 # and is an example of forward mode [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
 # To realise dual numbers on a computer we need to introduce the notation of a "type"
 # and create a customised type to represent dual numbers, which is what we discuss first.
-
+# For functions of multiple variables we can extend the concept of dual numbers to computing gradients
+# and Jacobians.
 # After developing our own implementation of dual numbers we investigate using the more sophisticated version
-# underlying ForwardDiff.jl. This version allows for computing gradients, which are useful for
-# optimisation problems. We will use this for a simple implementation of gradient descent.
+# underlying ForwardDiff.jl. 
 
 
 # **Learning Outcomes**
 #
 # 1. Definition and implementation of dual numbers and functions applied dual numbers.
-# 2. Using automatic differentiation to implement Newton's method
-# 3. Extension to gradients as implemented in ForwardDiff.jl
+# 2. Using automatic differentiation to implement Newton's method.
+# 3. Extending dual numbers to gradients of 2D functions.
+# 3. Computing higher-dimensional gradients using ForwardDiff.jl.
 
 
 # ## 2.1 Dual numbers
@@ -35,6 +36,8 @@ end
 # $$
 # (a+bϵ) + (c+dϵ) = (a+c) + (b+d)ϵ
 # $$
+
+import Base: + # we want to overload +
 
 function +(x::Dual, y::Dual)
     a,b = x.a, x.b # x == a+bϵ. This gets out a and b
@@ -60,10 +63,14 @@ function *(x::Dual, y::Dual)
 end
 
 
-# ### I.3.1 Differentiating polynomials
+# ### Differentiating polynomials
 
 # Dual numbers allow us to differentiate functions provided they are composed of
-# operations overloaded for `Dual`. In particular, we have that
+# operations overloaded for `Dual`. In particular, the properties of multiplication imply that
+# $$
+# (a + b ϵ)^k = a^k + k b a^{k-1} ϵ
+# $$
+# and therefore by linearity if $f$ is a polynomial it must satisfy
 # $$
 # f(x + b ϵ) = f(x) + bf'(x)ϵ
 # $$
@@ -87,7 +94,7 @@ Dual(a::Real) = Dual(a, 0) # converts a real number to a dual number with no ϵ
 +(x::Real, y::Dual) = Dual(x) + y
 +(x::Dual, y::Real) = x + Dual(y)
 
-# a simple recursive function to support x^2, x^3, etc.
+## a simple recursive function to support x^2, x^3, etc.
 function ^(x::Dual, n::Int)
     if n < 0
         error("Not implemented") # don't support negative n, yet
@@ -106,7 +113,7 @@ end
 f = x -> x^3 + 1
 f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
 
-# ### I.3.2 Differentiating functions
+# ### Differentiating functions
 
 # We can also overload functions like `exp` so that they satisfy the rules of
 # a _dual extension_, that is, are consistent with the formula $f(a+bϵ) = f(a) + bf'(a)ϵ$
@@ -122,14 +129,14 @@ f = x -> exp(x^2 + exp(x))
 f(Dual(1, 1))
 
 
-# What makes dual numbers so effective is that, unlike divided differences, they are not
+# What makes dual numbers so effective is that, unlike other methods for approximating derivatives like divided differences, they are not
 # prone to disasterous growth due to round-off errors: the above approximation
 # matches the true answer to roughly 16 digits of accuracy.
 
 
 # ------
 
-# **Problem 4(a)** Add support for `-`, `cos`, `sin`, and `/` to the type `Dual`
+# **Problem 1(a)** Add support for `-`, `cos`, `sin`, and `/` to the type `Dual`
 # by replacing the `# TODO`s in the below code.
 
 
@@ -174,10 +181,10 @@ x = 0.1
 @test cos(sin(x+ϵ)/(x+ϵ)).b ≈ -((cos(x)/x - sin(x)/x^2)sin(sin(x)/x))
 
 
-# **Problem 4(b)** Use dual numbers to compute the derivatives to
+# **Problem 1(b)** Use dual numbers to compute the derivatives to
 # 1. $\exp(\exp x \cos x + \sin x)$
 # 2. $∏_{k=1}^{1000} \left({x \over k}-1\right)$
-# 3. $f^{\rm s}_{1000}(x)$ where, as in Lab 1 Problem 3(d), $f^{\rm s}_n(x)$ corresponds to $n$-terms of the following continued fraction:
+# 3. $f^{\rm s}_{1000}(x)$ where $f^{\rm s}_n(x)$ corresponds to $n$-terms of the following continued fraction:
 # $$
 # 1 + {x-1 \over 2 + {x-1 \over 2 + {x-1 \over 2 + ⋱}}}.
 # $$
@@ -220,12 +227,13 @@ contdual.b
 
 
 
+# -------
+
+# ## 2.2 Gradients
 
 
-# ## Gradients
-
-
-# **Problem 2.2 (A)** Consider a 2D version of a dual number:
+# Dual numbers extend naturally to higher dimensions by adding a different dual-part for each direction. 
+# We will consider a 2D version of a dual number:
 # $$
 # a + b ϵ_x + c ϵ_y
 # $$
@@ -233,10 +241,31 @@ contdual.b
 # $$
 # ϵ_x^2 = ϵ_y^2 = ϵ_x ϵ_y =  0.
 # $$
-# Complete the following implementation supporting `+` and `*` (and
-# assuming `a,b,c` are `Float64`). Hint: you may need to work out on paper
-# how to multiply `(s.a + s.b ϵ_x + s.c ϵ_y)*(t.a + t.b ϵ_x + t.c ϵ_y)` using the
-# relationship above.
+# Multiplication then follows the rule:
+# $$
+# (a + b ϵ_x + c ϵ_y) (α + β ϵ_x + γ ϵ_y) = aα + (bα + a β)ϵ_x + (cα + a γ)ϵ_y
+# $$
+# From this we see
+# $$
+# \begin{align*}
+#  (a + b ϵ_x + c ϵ_y)^k (α + β ϵ_x + γ ϵ_y)^j &= (a^k + k b a^{k-1} ϵ_x + k c a^{k-1} ϵ_y)(α^j + j β α^{j-1} ϵ_x + j γ α^{j-1} ϵ_y) \\
+#    &= a^k α^j + (jβ  a^k α^{j-1} + k b a^{k-1} α^j )ϵ_x + (jγ  a^k α^{j-1} + k c a^{k-1} α^j )ϵ_y
+# \end{align*}
+# $$
+# In particular, we have:
+# $$
+# (x + ϵ_x)^k (y + ϵ_y)^j = x^k y^j + k x^{k-1} y^j ϵ_x + j x^k y^{j-1} ϵ_y
+# $$
+# and hence by linearity if $f$ is a polynomial we can compute the gradient via:
+# $$
+# f(x  + ϵ_x, y  + ϵ_y) = f(x,y) + f_x(x,y) ϵ_x + f_y(x,y) ϵ_y.
+# $$
+
+# -------
+
+# **Problem 2** 
+# Complete the following implementation of `Dual2D` supporting `+` and `*` (and
+# assuming `a,b,c` are `Float64`).
 
 import Base: *, +, ^
 struct Dual2D
@@ -248,17 +277,26 @@ end
 
 function +(s::Dual2D, t::Dual2D)
     ## TODO: Implement +, returning a Dual2D
+    ## SOLUTION
+    Dual2D(s.a + t.a, s.b + t.b, s.c + t.c)
+    ## END
 end
 
 function *(c::Number, s::Dual2D)
     ## TODO: Implement c * Dual2D(...), returning a Dual2D
-    
+    ## SOLUTION
+    Dual2D(c * s.a, c * s.b, c * s.c)
+    ## END
 end
 
 function *(s::Dual2D, t::Dual2D)
     ## TODO: Implement Dual2D(...) * Dual2D(...), returning a Dual2D
     
-    
+    ## SOLUTION
+    ## we deduce (s.a + s.b ϵ_x + s.c ϵ_y)*(t.a + t.b ϵ_x + t.c ϵ_y) == 
+    ## s.a * t.a + (s.a*t.b + s.b*t.a)*ϵ_x + (s.a*t.c + s.c*t.a)*ϵ_y
+    Dual2D(s.a * t.a, s.a * t.b + s.b * t.a, s.a * t.c + s.c * t.a)
+    ## END
 end
 
 f = function (x, y) # (x+2y^2)^3 using only * and +
@@ -269,35 +307,36 @@ end
 x,y = 1., 2.
 @test f(Dual2D(x,1.,0.), Dual2D(y,0.,1.)) == Dual2D(f(x,y), 3(x+2y^2)^2, 12y*(x+2y^2)^2)
 
-# This has computed the gradient as f(x,y) + f_x*ϵ_x + f_y*ϵ_y
-# == (x+2y^2)^3 + 3(x+2y^2)^2*ϵ_x + 12y(x+2y^2)^2*ϵ_y
+## This has computed the gradient as f(x,y) + f_x*ϵ_x + f_y*ϵ_y
+## == (x+2y^2)^3 + 3(x+2y^2)^2*ϵ_x + 12y(x+2y^2)^2*ϵ_y
 
-# ##
+# ----
 
-# ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation. 
+# ## 2.3 ForwardDiff.jl and computing derivatives/gradients/Jacobians/Hessians
+
+# ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation,
+# including supporting gradients and Jacobians. Its usage in 1D works as follows:
 
 using ForwardDiff, Test
 
 @test ForwardDiff.derivative(cos, 0.1) ≈ -sin(0.1) # uses dual number
 
 # It also works with higher dimensions,  allowing for arbitrary dimensional computation
-# of gradients. Consider a simple function:
+# of gradients. Consider a simple function $f : ℝ^n → ℝ$ defined by
+# $$
+# f([x_1,…,x_n]) = ∑_{k=1}^{n-1} x_k x_{k+1}
+# $$
+# which we can implement as follows:
 
 f = function(x)
-    ret = zero(eltype(x))
+    ret = zero(eltype(x)) # Need to use zero(eltype(x)) to support dual numbers
     for k = 1:length(x)-1
         ret += x[k]*x[k+1]
     end
     ret
 end
 
-f = function(x)
-    ret = zero(eltype(x))
-    for k = 1:length(x)-1
-        ret += x[k]^2
-    end
-    ret
-end
+# We can use ForwardDiff.jl to compute its gradient:
 
 x = randn(5)
 ForwardDiff.gradient(f,x)
@@ -307,35 +346,80 @@ ForwardDiff.gradient(f,x)
 @time ForwardDiff.gradient(f,randn(1000));
 @time ForwardDiff.gradient(f,randn(10_000)); # around 100x slower
 
+# The reason for this is if we have $n$ unknowns the higher-dimensional dual number uses $n$ different $ϵ$s
+# for each argument, meaning the input has $n^2$ degrees-of-freedom. 
+# This will motivate the move to reverse-mode automatic differentiation in the next lab which will reduce the
+# complexity to $O(n)$ for many gradient calculations.
 
-# This will motivate the move to reverse-mode automatic differentiation.
+# ### Jacobians
+#
+# ForwardDiff.jl also works well with Jacobians, a problem where the benefits of reverse-mode automatic differentiation
+# are less clear. 
+# Denote the Jacobian as
+# $$
+#  J_f = \begin{bmatrix} {∂ f_1 \over ∂x_1} & ⋯ & {∂ f_1 \over ∂x_ℓ} \\
+#       ⋮ & ⋱ & ⋮ \\
+#       {∂ f_m \over ∂x_1} & ⋯ & {∂ f_m \over ∂x_ℓ} 
+# \end{bmatrix}
+# $$
+# The function `ForwardDiff.jacobian(f, 𝐱)` computes $J_f(𝐱)$.
+# Here is an example of computing the Jacobian of a simple function $f : ℝ^2 → ℝ^2$:
 
-# ## I.4 Newton's method
+f = function(𝐱)
+    (x,y) = 𝐱 # get out the components of the vector
+    [exp(x*cos(y)), sin(exp(x*y))]
+end
 
-# Newton's method is a simple algorithmic approach that you may have seen before in school for computing roots (or zeros)
-# of functions. The basic idea is given an initial guess $x_0$,
-# find the first-order Taylor approximation $p(x)$ (i.e., find the line that matches the slope of the function at the point)
+x,y = 0.1,0.2
+@test ForwardDiff.jacobian(f, [x,y]) ≈ [exp(x*cos(y))*cos(y)        -exp(x*cos(y))*x*sin(y);
+                                        cos(exp(x*y))*exp(x*y)*y     cos(exp(x*y))*exp(x*y)*x]
+
+
+# -----
+
+# **Problem 3** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Hamiltonian
 # $$
-# f(x) ≈ \underbrace{f(x_0) + f'(x_0) (x- x_0)}_{p(x)}.
+#   f([x_1, …, x_n, y_1, …, y_n]) =  {1 \over 2} ∑_{k=1}^n y_k^2 + ∑_{k=1}^{n-1} \exp(x_k - x_{k+1})
 # $$
-# We can then solve the root finding problem for $p(x)$ exactly:
-# $$
-# p(x) = 0 ⇔ x = x_0 - {f(x_0) \over f'(x_0)}
-# $$
-# We take this root of $p(x)$ as the new initial guess and repeat. In other words, we have a simple sequence
-# defined by
+
+function todahamiltonian(𝐱𝐲)
+    n = length(𝐱𝐲) ÷ 2
+    x,y = 𝐱𝐲[1:n], 𝐱𝐲[n+1:end] # split the input vector into its two components.
+    ret = zero(eltype(𝐱𝐲))
+    ## TODO: implement the Hamiltonian, eg using for-loops
+    ## SOLUTION
+    for k = 1:n
+        ret += y[k]^2/2
+    end
+    for k = 1:n-1
+        ret += exp(x[k] - x[k+1])
+    end
+    ret
+    ## END
+end
+
+x = [1.,2,3]
+y = [4.,5,6]
+
+ForwardDiff.hessian(todahamiltonian, [x; y])
+
+# ----
+
+# ## 2.4 Newton's method
+
+# We will conclude with an application of these results to Newton's method.
+# Given an initial guess $x_0$ to a root of a function $f$,  Newton's method is a simple sequence defined by
 # $$
 # x_{k+1} = x_k - {f(x_k) \over f'(x_k)}
 # $$
-# If the initial guess is "close enough" to a root $r$ of $f$ (ie $f(r) = 0$)
-# then it is known that $x_k → r$. Thus for large $N$ we have $x_N ≈ r$. Note the notion of "close enough"
-# is a complicated and rich theory beyond the scope of this module, and connects to the theory of [Mandelbrot sets](https://en.wikipedia.org/wiki/Mandelbrot_set).
+# If the initial guess $x_0$ is "close enough" to a root $r$ of $f$ (ie $f(r) = 0$)
+# then it is known that $x_k → r$. Thus for large $N$ we have $x_N ≈ r$. 
 
 # Dual numbers as implemented by `Dual` gives us a powerful tool to compute derivatives and get a simple implementation
 # of Newton's method working:
 
 
-## derivative(f, x) computes the derivative at a point x using Dual
+## derivative(f, x) computes the derivative at a point x using our version of Dual
 derivative(f, x) = f(Dual(x,1)).b
 
 function newton(f, x, N) # x = x_0 is the initial guess
@@ -354,17 +438,8 @@ f(r)
 
 # -----
 
-# **Problem 5(a)** For $f(x) = x^5 + x^2 + 1$, plot the error of $x_k$ for `k = 1:15` where the
-# y-axis is scaled logarithmically and chosen $x_0 = 0.1$ You may
-# use the computed `r` as the "exact" root. What do you think the convergence rate is?
 
-## TODO: compute and plot the error of `newton(f, 0.1, k)` for `k = 1:15`
-## SOLUTION
-plot(1:15, [nanabs(newton(f, 0.1, k)-r) for k=1:15]; yscale=:log10)
-## It converges faster than exponentially.
-## END
-
-# **Problem 5(b)** Use `newton` with a complex number to compute
+# **Problem 4(a)** Use `newton` with a complex number to compute
 # an approximation to a complex root of $f(x) = x^5 - x^2 + 1$.
 # Verify the approximation is accurate by testing that it satisfies $f(r)$
 # is approximately zero.
@@ -376,7 +451,7 @@ r = newton(f, 0.1 + 0.2im, 100)
 f(r) # close to zero
 ## END
 
-# **Problem 5(c)** By changing the initial guesses compute 5 roots to
+# **Problem 4(b)** By changing the initial guesses compute 5 roots to
 # $sin(x) - 1/x$. Hint: you may need to add an overload for `/(x::Real, y::Dual)`.
 
 ## TODO: Use `newton` to compute roots of `sin(x) - 1/x`.
@@ -395,3 +470,24 @@ newton(x -> sin(x) - 1/x, 5, 100),
 newton(x -> sin(x) - 1/x, 6, 100)
 
 ## END
+
+
+# **Problem 5** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
+# Extend our newton method for vector-valued functions:
+
+function newton(f, x::AbstractVector, N) # x = x_0 is the inital guess, now a vector
+    ## TODO: reimplement newton for vector inputs using ForwardDiff.jacobian
+    ## SOLUTION
+    for k = 1:N
+        x = x - ForwardDiff.jacobian(f,x) \ f(x)
+    end
+    x
+    ## END
+end
+
+f = function(𝐱)
+    (x,y) = 𝐱 # get out the components of the vector
+    [cos(7x^2*y + y), cos(7*x*y)]
+end
+
+@test maximum(abs,f(newton(f, [0.1,0.2], 200))) ≤ 1E-13
