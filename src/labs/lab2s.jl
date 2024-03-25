@@ -377,7 +377,7 @@ x,y = 0.1,0.2
 
 # -----
 
-# **Problem 3** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Hamiltonian
+# **Problem 3** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Toda Hamiltonian
 # $$
 #   f([x_1, …, x_n, y_1, …, y_n]) =  {1 \over 2} ∑_{k=1}^n y_k^2 + ∑_{k=1}^{n-1} \exp(x_k - x_{k+1})
 # $$
@@ -491,3 +491,6 @@ f = function(𝐱)
 end
 
 @test maximum(abs,f(newton(f, [0.1,0.2], 200))) ≤ 1E-13
+
+
+
