@@ -60,6 +60,7 @@ ps_grad = gradient(p -> sum(model(x, p, st)[1]), ps)[1] # returns a named tuple 
 
 
 
+
 # Going beyond basic linear algebra, we can apply an "activator" function $f$ to each
 # entry of the map, to represent maps of the form:
 # $$
@@ -89,23 +90,39 @@ ps_grad = gradient(p -> sum(model(x, p, st)[1]), ps)[1] # returns a named tuple 
 ## respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
 ## END
 
-n = 10
+# Let's see an example directly related to a classic numerical analysis problem: approximating functions by a continuous piecewise affine
+# function, as done in the Trapezium rule. Unlike a standard approximation we do not 
+
+
+
+n = 2
 model = Dense(1 => n, relu)
 A = randn(n,1)
 b = randn(n)
+st = NamedTuple() # no state
+p = x -> sum(model([x], (weight = [1;2;;], bias=[3,-1]), st)[1])
+x = range(-5,5, 100_00)
+plot(x, p.(x))
+
+n = 10
+model = Chain(Dense(n => 1), Dense(1 => n, relu))
+A = randn(n,1)
+b = randn(n)
+st = NamedTuple() # no state
 p = x -> sum(model([x], (weight = A, bias=b), st)[1])
 x = range(-5,5, 100_00)
 plot(x, p.(x))
 
 
 
-model = Chain(Dense(1 => n, relu), Dense(n => n, relu))
-B = randn(n,n)
-c = randn(n)
+
+model = Chain(Dense(1 => n, relu), Dense(n => 1))
+A = randn(n,1)
+B = randn(1,n)
+c = [0.0]
 st = (layer_1 = NamedTuple(), layer_2 = NamedTuple())
 p = x -> sum(model([x], (layer_1 = (weight=A, bias=b),
                          layer_2 = (weight=B, bias=c)), st)[1])
-
 
 x = range(-5,5, 100_00)
 plot(x, p.(x))
