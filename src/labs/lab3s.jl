@@ -272,13 +272,15 @@ end
 #  p_2(𝐭) &= J_g(f(x))^⊤ 𝐭  \\
 #  p_3(𝐭) &= ∇h(g(f(𝐱)) 𝐭
 # \end{align*}
-# The gradient is given _back-propagation_:
+# The gradient is given by _back-propagation_:
 # $$
 #  p_1(p_2(p_3(1))) = J_f(𝐱)^⊤ J_g(f(𝐱))^⊤  ∇h(g(f(𝐱)).
 # $$
 # Here the "right" order to do the multiplications is clear: matrix-matrix multiplications are expensive
-# so its best to reverse order. Also, the pullback doesn't give us enough information to implement forward-propagation.
-# (This can be done using `Zygote.pushforward` which implements the transpose map $𝐭 ↦ J_f(𝐱) 𝐭$).
+# so its best to do it reverse order so that we only ever have matrix-vector multiplications.
+# Also, the pullback doesn't give us enough information to implement forward-propagation.
+# (This can be done using `Zygote.pushforward` which implements the transpose map $𝐭 ↦ J_f(𝐱) 𝐭$
+# and is used in Zygote.jl for 
 
 
 
@@ -290,4 +292,97 @@ rrule(broadcast, sin, [1,2])
 unthunk(pb(1)[2])
 
 @ent Zygote.gradient(sum, [1,2])
+
+
+
+# ## 3.4 Optimisation
+
+# A key place where reverse-mode automatic differentiation is large scale optimisation.
+
+# As an extremely simple example we will look at the classic optimisation problem
+# representing $A 𝐱 = 𝐛$: find $𝐱$ that minimises
+# $$
+# f_{A,𝐛}(𝐱) = {1 \over 2} 𝐱^⊤ A 𝐱 - 𝐱^⊤ 𝐛
+# $$
+# where $A$ is symmetric positive definite.
+# Of course we can use tried-and-true techniques like the QR factorisation but here we want
+# to emphasise we can also solve this with simple optimsation algorithms like gradient desecent
+# which do not know the structure of the problem. For simplicity we will actually consider a square
+# problem with a classic finite-difference stencil:
+# $$
+# A = {n^2} \begin{bmatrix} 2 & -1 \\ -1 & 2 & ⋱ \\ &  ⋱ & ⋱ & -1 \\ && -1 & 2 \end{bmatrix}
+# $$
+# In other words our functional has the form:
+# $$
+# f_{A,𝐛}(𝐱) = {n^2}(∑_{k=1}^n x_k^2 - ∑_{k=1}^{n-1} x_k x_{k+1}) - ∑_{k=1}^n x_k b_k
+# $$
+# We need to write this in a vectorised way to ensure Zygote is sufficiently fast. Here is the code
+# with a million degrees of freedom, way beyond what could ever vbe done 
+
+n = 1000
+
+f = x -> (2x'x - 2x[1:end-1]'x[2:end])*n^2 - 2sum(x)
+
+x = randn(n) # initial guess
+Zygote.gradient(f, x) # compile
+@time Zygote.gradient(f, x)
+
+# Our algorithm is a simple gradient descent:
+# $$
+# x_{k+1} = x_k - γ ∇f(x_k)
+# $$
+# where $γ$ is the learning rate. Here's a simple implementation with learning rate equal to 1:
+
+x = randn(n)
+for k = 1:10_000
+    γ = 1
+    y = x - γ*Zygote.gradient(f, x)[1]
+    while f(x) < f(y)
+        γ /= 2 # half the learning rate
+        y = x - γ*Zygote.gradient(f, x)[1]
+    end
+    x = y
+    @show γ,f(x)
+end
+
+A = SymTridiagonal(fill(2,n), fill(-1,n-1))*n^2
+
+
+f(A \ ones(n))
+plot(A \ ones(n))
+
+n = 1_00; h = 1/n;
+
+y = ones(n)
+f = y -> sum(y[1:end-1] .* sqrt.(1 .+ ((y[2:end] - y[1:end-1])/h) .^2))/n
+
+@time Zygote.gradient(f, y)
+
+for k = 1:1_000
+    γ = 1
+    z = y - γ*Zygote.gradient(f, y)[1]
+    z[1] = z[end] = 1
+    while f(y) < f(z)
+        γ /= 2 # half the learning rate
+        z = y - γ*Zygote.gradient(f, y)[1]
+        z[1] = z[end] = 1
+    end
+    y = z
+    @show γ,f(y)
+end
+
+plot(y)
+# 
+
+using Optimization, OptimizationOptimJL
+
+
+n = 1000
+f = (y,(a,b,h)) -> (sqrt(1 + ((y[1] - a)/h).^2) + sum(y[1:end-1] .* sqrt.(1 .+ ((y[2:end] - y[1:end-1])/h) .^2)) + sqrt(1 + ((b - y[end])/h).^2))*h
+y0 = ones(n-2) # drop boundary conditions
+prob = OptimizationProblem(OptimizationFunction(f, Optimization.AutoZygote()), y0, (1,1,1/n))
+@time y = solve(prob, BFGS()); plot(y)
+
+@time y = solve(prob, GradientDescent()); plot(y)
+
 
