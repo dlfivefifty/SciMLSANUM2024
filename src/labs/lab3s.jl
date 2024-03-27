@@ -302,39 +302,41 @@ unthunk(pb(1)[2])
 # As an extremely simple example we will look at the classic optimisation problem
 # representing $A 𝐱 = 𝐛$: find $𝐱$ that minimises
 # $$
-# f_{A,𝐛}(𝐱) = {1 \over 2} 𝐱^⊤ A 𝐱 - 𝐱^⊤ 𝐛
+# f_{A,𝐛}(𝐱) = 𝐱^⊤ A 𝐱 - 2𝐱^⊤ 𝐛
 # $$
 # where $A$ is symmetric positive definite.
 # Of course we can use tried-and-true techniques like the QR factorisation but here we want
 # to emphasise we can also solve this with simple optimsation algorithms like gradient desecent
-# which do not know the structure of the problem. For simplicity we will actually consider a square
-# problem with a classic finite-difference stencil:
+# which do not know the structure of the problem. We consider a matrix where we know gradient descent
+# will converge fast:
 # $$
-# A = {n^2} \begin{bmatrix} 2 & -1 \\ -1 & 2 & ⋱ \\ &  ⋱ & ⋱ & -1 \\ && -1 & 2 \end{bmatrix}
+# A = {n^2} \begin{bmatrix} 1 & 1/4 \\ 1/4 & 1 & ⋱ \\ &  ⋱ & ⋱ & 1/n^2 \\ && 1/n^2 & 1 \end{bmatrix}
 # $$
 # In other words our functional has the form:
 # $$
-# f_{A,𝐛}(𝐱) = {n^2}(∑_{k=1}^n x_k^2 - ∑_{k=1}^{n-1} x_k x_{k+1}) - ∑_{k=1}^n x_k b_k
+# f_{A,𝐛}(𝐱) = ∑_{k=1}^n x_k^2 - ∑_{k=2}^n x_{k-1} x_k/k^2 - ∑_{k=1}^n x_k b_k
 # $$
-# We need to write this in a vectorised way to ensure Zygote is sufficiently fast. Here is the code
-# with a million degrees of freedom, way beyond what could ever vbe done 
+# For simplicity we will take $𝐛$ to be the vector with all ones.
+# We need to write this in a vectorised way to ensure Zygote is sufficiently fast. We can efficiently
+# compute gradients even
+# with a million degrees of freedom, way beyond what could ever be done with forward-mode automatic differentiation:
 
-n = 1000
-
-f = x -> (2x'x - 2x[1:end-1]'x[2:end])*n^2 - 2sum(x)
+n = 1_000_000
+f = x -> (x'x + 2x[1:end-1]'*(x[2:end] ./ (2:n).^2)) - 2sum(x)
 
 x = randn(n) # initial guess
 Zygote.gradient(f, x) # compile
 @time Zygote.gradient(f, x)
 
-# Our algorithm is a simple gradient descent:
+# Our algorithm is a quick-and-dirty gradient descent:
 # $$
-# x_{k+1} = x_k - γ ∇f(x_k)
+# x_{k+1} = x_k - γ_k ∇f(x_k)
 # $$
-# where $γ$ is the learning rate. Here's a simple implementation with learning rate equal to 1:
+# where $γ_k$ is the learning rate. To choose $γ_k$ we just halve
+# the learning rate until we see decrease.
 
-x = randn(n)
-for k = 1:10_000
+
+for k = 1:30
     γ = 1
     y = x - γ*Zygote.gradient(f, x)[1]
     while f(x) < f(y)
@@ -345,13 +347,77 @@ for k = 1:10_000
     @show γ,f(x)
 end
 
-A = SymTridiagonal(fill(2,n), fill(-1,n-1))*n^2
+
+# We can compare this with the "true" solution:
+
+A = SymTridiagonal(ones(n), (2:n) .^ (-2))
+@test x ≈ A\ones(n)
+
+# 
+
+using Optimization, OptimizationOptimJL
 
 
-f(A \ ones(n))
-plot(A \ ones(n))
+n = 1000
+f = (y,(a,b,h)) -> (sqrt(1 + ((y[1] - a)/h).^2) + sum(y[1:end-1] .* sqrt.(1 .+ ((y[2:end] - y[1:end-1])/h) .^2)) + sqrt(1 + ((b - y[end])/h).^2))*h
+y0 = ones(n-2) # drop boundary conditions
+prob = OptimizationProblem(OptimizationFunction(f, Optimization.AutoZygote()), y0, (1,1,1/n))
+@time y = solve(prob, BFGS()); plot(y)
 
-n = 1_00; h = 1/n;
+@time y = solve(prob, GradientDescent()); plot(y)
+
+
+
+
+# We will do an example that will connect to neural networks.
+
+
+n = 100
+x = range(-1, 1; length = n)
+y = exp.(x)
+
+function summation_model(x, (𝐚, 𝐛))
+    Y = relu.(𝐚*x' .+ 𝐛)
+    vec(sum(Y; dims=1)) # sums over the columns
+end
+
+convex_regression_loss((𝐚, 𝐛), (x,y)) = norm(summation_model(x, (𝐚, 𝐛)) - y)
+
+𝐚,𝐛 = randn(n),randn(n)
+plot(x, summation_model(x, (𝐚, 𝐛)))
+
+# We can efficiently compute the gradient with respect to the parameters:
+
+@time Zygote.gradient(convex_regression_loss, (𝐚, 𝐛), (x,y))[1]
+
+
+
+
+loss = convex_regression_loss((𝐚,𝐛), (x,y))
+for k = 1:100
+    γ = 0.01
+    (a_n, b_n) = (𝐚, 𝐛) .- γ.*Zygote.gradient(convex_regression_loss, (𝐚, 𝐛), (x,y))[1]
+    while loss < convex_regression_loss((a_n, b_n), (x,y))
+        γ /= 2 # half the learning rate
+        (a_n, b_n) = (𝐚, 𝐛) .- γ.*Zygote.gradient(convex_regression_loss, (𝐚, 𝐛), (x,y))[1]
+    end
+    (𝐚, 𝐛) = (a_n, b_n)
+    global loss = convex_regression_loss((𝐚,𝐛), (x,y))
+    @show γ,loss
+end
+
+plot(x, y)
+plot!(x, summation_model(x, (𝐚, 𝐛)))
+
+
+# prob = OptimizationProblem(OptimizationFunction(convex_regression_loss, Optimization.AutoZygote()), y0, (1,1,1/n))
+
+
+
+# **Problem** 
+
+## SOLUTION
+n = 100; h = 1/n;
 
 y = ones(n)
 f = y -> sum(y[1:end-1] .* sqrt.(1 .+ ((y[2:end] - y[1:end-1])/h) .^2))/n
@@ -372,17 +438,4 @@ for k = 1:1_000
 end
 
 plot(y)
-# 
-
-using Optimization, OptimizationOptimJL
-
-
-n = 1000
-f = (y,(a,b,h)) -> (sqrt(1 + ((y[1] - a)/h).^2) + sum(y[1:end-1] .* sqrt.(1 .+ ((y[2:end] - y[1:end-1])/h) .^2)) + sqrt(1 + ((b - y[end])/h).^2))*h
-y0 = ones(n-2) # drop boundary conditions
-prob = OptimizationProblem(OptimizationFunction(f, Optimization.AutoZygote()), y0, (1,1,1/n))
-@time y = solve(prob, BFGS()); plot(y)
-
-@time y = solve(prob, GradientDescent()); plot(y)
-
-
+## END

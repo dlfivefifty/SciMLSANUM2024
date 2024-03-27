@@ -1,218 +1,320 @@
 # # SciML SANUM2024
-# # Lab 4: Solving differential equations in DifferentialEquations.jl
-
-# We now consider the solution of time-evolution ordinary differential equations (ODEs) using the
-# DifferentialEquations.jl framework. An important feature is the ability to
-# use automatic-differentiation with the numerical solutions, allowing us to solve
-# simple nonlinear equations or optimisation problems involving parameters or initial conditions in the ODEs.
+# # Lab 4: Neural Networks and Lux.jl
+#
+# In this lab we introduce neural networks as implemented in Lux.jl. 
+# A neural network (NN) is in some sense just a function with many parameters
+# in a way that facilitates computing gradients with respect to these parameters.
+# That is: it is at its core a way of book-keeping a heavily parameterised function.
+# It is constructed by composing basic building blocks usually built from linear
+# algebra operations, combined with simple _activator functions_. 
+# Here we look at the simplest case and see how the paremeters in a NN can be chosen to
+# solve optimisation problems. 
 
 # **Learning Outcomes**
-# 1. Solving ODEs using DifferentialEquations.jl
-# 2. Differentiating an ODE with respect to parameters or initial conditions.
-# 3. Solving simple nonlinear equations or optimisation problems.
+# 1. Single-layer neural networks and activation functions.
+# 2. Creating deeper networks as a `Chain`.
+# 3. Training neural networks by simple optimisation.
 
-using DifferentialEquations, Plots, Test
-
-# ## 4.1 Solving ODEs with DifferentialEquations.jl
-
-# DifferentialEquations.jl is a powerful framework for solving many different types of equations with
-# many different types of solves, including stochastic differential equations, retarded differential equations,
-# mixed discrete-continuous equations, PDEs,  and more. Here we will focus on the simplest case of second-order
-# time-evolution ODEs, beginning with the classic pendulum equation.
+using Lux, Random, Optimisers, Zygote, Plots, LinearAlgebra, Test
 
 
-# Consider the pendulum equation with friction
+# ## 4.1 Single layer neural networks
+
+# We begin with a single-layer neural network without an activator
+# function. This happens to be precisely maps of the form
 # $$
-# u'' = τ*u' - \sin u
+# 𝐱 ↦ A𝐱 + 𝐛
 # $$
-# which we can rewrite as a first order system:
+# where $A ∈ ℝ^{m × n}$ and $𝐛 ∈ ℝ^n$. The space of such maps is
+# modelled by the `Dense` type, where the `weight` corresponds to $A$
+# and the `bias` corresponds to $𝐛$. Here we see a simple example
+# of constructing the model (the space of all such maps) and evaluating
+# a specific map by specifying the paramters:
+
+m,n = 5,4
+
+model = Dense(n => m) # represents
+
+A = randn(5,4)
+b = randn(5)
+x = randn(4)
+const NOSTATE = NamedTuple() # no state
+val,newst = model(x, (weight=A, bias=b), NOSTATE) # returns the output of the map and the "state", which we ignore
+
+@test val ≈ A*x + b # our model with these parameters is just A*x + b
+
+
+# An important feature is that we can compute gradients with respect to parameters of functions of our
+# model. Before we looked at the case where
+# we differentiated with respect to vectors but a power feature in Zygote is it works for all types like named-tuples.
+
+
+ps = (weight=A, bias=b)
+ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named tuple containing the gradients
+
+# Because our Neural Network at this stage is linear in the paremeters the gradient is actually quite simple: eg the partial derivative with
+# respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
+
+
+@test ps_grad[:weight] ≈ ones(5) * x'
+@test ps_grad[:bias] ≈ ones(5)
+
+
+
+
+# Going beyond basic linear algebra, we can apply an "activator" function $f$ to each
+# entry of the map, to represent maps of the form:
 # $$
-# [u',v'] = [v, -τ*v - sin(u)]
+# 𝐱 ↦ f.(A𝐱 + 𝐛)
 # $$
-# We can represent the right-hand side of this equation as a function that writes to a
-# `du` vector as follows:
+# Where we use the Julia-like broadcast notation to mean entrywise application.
+# The classic in ML is the `relu` function which is really just $\max(0,x)$:
 
-function pendulum_rhs!(du, 𝐮, τ, t)
-    u,v = 𝐮
-    du[1] = v
-    du[2] = -sin(u) - τ*v
-end
+x = range(-1,1, 1000)
+plot(x, relu.(x); label="relu")
 
-# Here `τ` plays the role of a parameter: for fast time-stepping its essential that we know the types
-# at compile time and hence its much better to pass in a parameter than refer to a global variable.
-# We can now construct a representation of the ODE problem as follows:
+# We can incorporate this in our model as follows:
 
-τ = 0.0 # no friction
-T = 10.0 # final time
-u₀, v₀ = 1,1 # initial conditions for poistion and velocity
-prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
+model = Dense(4 => 5, relu)
+model(x, (weight = A, bias=b), NOSTATE)[1]
 
-# DifferentialEquations.jl has many diferent time-steppers, we will use a simple one based on
-# an explicit Runge–Kutta method (a more efficient analogue of ode45 in Matlab):
+# And we can differentiate:
 
-sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
-plot(sol)
+ps = (weight=A, bias=b)
+ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named tuple containing the gradients
 
-# Because we have access to automatic differentiation, we can also easily use implicit methods
-# (even though they aren't needed here):
-
-sol = solve(prob, Rodas4(), abstol = 1e-10, reltol = 1e-10)
-plot(sol)
-
-
-# **Problem** Implement a predator-prey model
-# $$
-# [x',y'] = [α*x - β*x*y, δ*x*y - γ*y]
-# $$
-# and solve the solution on $T ∈ [0,10]$ with $α , β,δ,γ = 1,2,3,4$.
-
-function predatorprey_rhs!(du, 𝐮, (α,β,δ,γ), t)
-    ## TODO: Implement the right-hand side for the predator prey model
-    ## SOLUTION
-    x,y = 𝐮
-    du[1] = α*x - β*x*y
-    du[2] = δ*x*y - γ*y
-    ## END
-end
-
-## TODO: use predatorprey_rhs! to setup an ODE and plot the solution
-## SOLUTION 
-prob = ODEProblem(predatorprey_rhs!, [u₀, v₀], (0.0, T), (1,2,3,4))
-sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
-plot(sol)
-## END
-
-# ## 4.2 Combining auto-differentiation with DifferentialEquations.jl
-
-# The combination of automatic-differentiation and time-stepping allows for differentiating
-# with respect to parameters through an actual solve. For forward-mode automatic differentiation 
-# this is intuitive: the values at each time-step are now dual numbers. Here we see a simple
-# example using ForwardDiff.jl. Consider the problem of choosing a friction so at the end time
-# the pendulum is at the bottom (but not necessarily stationary). We can set this up as follows:
-
-
-function pendulum_friction(τ)
-    T = 10.0 # final time
-    u₀, v₀ = 1,1 # initial conditions
-    prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
-    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
-end
-
-pendulum_friction_stop(τ) = pendulum_friction(τ)[end][1] # find the value of u at the final time
-
-pendulum_friction_stop(0.1) # value at T = 10 with friction equal to 0.1
-
-# We can immediately differentiate with respect to `τ`:
-
-using ForwardDiff
-ForwardDiff.derivative(pendulum_friction_stop, 0.1)
-
-# We can use this in a simple newton iteration to, for example, find the friction
-# that results in a desired end conditon:
-
-
-τ = 0.1
-for k = 1:10
-    τ = τ - ForwardDiff.derivative(pendulum_friction_stop, τ) \ pendulum_friction_stop(τ)
-end
-τ, pendulum_friction_stop(τ)
-
-# We see that it has successed in finding one such friction so that we end 
-# up at the bottom at the final time:
-
-plot(pendulum_friction(τ))
-
-# ------
-
-# **Problem** We can also differentiate with respect to the initial conditions.
-# Find an initial velocity such that the pendulum is at the bottom at $T = 10$ with
-# no friction, assuming $u(0) = 1$.
+# **Problem** Derive the forumula  for the gradient of the model with an activator function and compare it with
+# the numerical result just computed. Hint: The answer depends on the output value.
 
 ## SOLUTION
-function pendulum_initialvelocity(v₀)
-    T = 10.0 # final time
-    prob = ODEProblem(pendulum_rhs!, [1, v₀], (0.0, T), 0)
-    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+## the partial derivative with
+## respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
+## END
+
+# Let's see an example directly related to a classic numerical analysis problem: approximating 
+# functions by a continuous piecewise affine
+# function, as done in the Trapezium rule. Our model corresponds to a sum of weighted and shifted `relu` functions:
+# $$
+# p_{𝐚,𝐛}(x) := ∑_{k=1}^n {\relu}(a_k x + b_k)
+# $$
+# We note that this is a sum of positive convex functions so only useful for approximating positive convex functions
+# (we will generalise this later).  Thus we want to choose the paremeters to fit data generated by a positive convex function,
+# e.g., $f(x) = 1 - \exp(-x^2)$. Here we first generate "training data" which means the samples of the function on a grid.
+# We want our data to be a $1×n$ matrix show 
+
+n = 100
+x = range(-1, 1; length = n)
+y = exp.(x)
+
+# Our one-layer neural network (before the summation) is
+# $$
+#   relu.(𝐚x + 𝐛)
+# $$
+# which corresponds to a simple dense layer with `relu` activation.
+# We then sum over the output of this to get the model
+# $$
+#   [1,…,1]^⊤ relu.(𝐚x + 𝐛)
+# $$
+# In our case `x` will be a vector containing the grid we sample on
+# but we first need to transpose it to be a $1 × n$ matrix, which will apply the NN
+# to each grid point. We can then sum over the columns to get the value of the model with the given
+# paramaters at the grid points.
+
+nn = Dense(1 => n, relu)
+function summation_model(nn, x, ps)
+    Y,st = nn(x', ps, NOSTATE) # k-th column contains relu.(𝐚x[k] + 𝐛)
+    vec(sum(Y; dims=1)) # sums over the columns
 end
 
-pendulum_initialvelocity_stop(v₀) = pendulum_initialvelocity(v₀)[end][1]
+# We want to choose the paramters to minimise a loss function. Here we
+# just wish to minimise the 2-norm erro which we can write as follow:
 
-v0 = 1.0
-for k = 1:10
-    v0 = v0 - ForwardDiff.derivative(pendulum_initialvelocity_stop, v0) \ pendulum_initialvelocity_stop(v0)
-end
-v0, pendulum_initialvelocity_stop(v0)
-
-plot(pendulum_initialvelocity(v0))
-
-
-
-# **Problem** We can also compute gradients and Jacobians through solves using
-# forward-mode autmatic differentiation. For the predator and prey model, fix $α = γ = 1$
-# and initial conditions $x(0) = 1$, $y(0) = 2$.
-# Use automatic differentiation with vector Newton iteration  to choose
-# choose $β,δ$ so that $x(10) = y(10) = 1$.
-
-
-## TODO: find the parameters in predator and prey to reach the desired end condition
-## SOLUTION 
-function predatorprey(βγ)
-    β,γ = βγ
-    ## TODO: solve the 
-    ## SOLUTION
-    T = 10.0 # final time
-    prob = ODEProblem(predatorprey_rhs!, [1, 2], (0.0, T), (1,β,γ,1))
-    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
-    ## END
+function convex_regression_loss(nn, ps, (x,y))
+    ỹ = summation_model(nn, x, ps)
+    norm(ỹ - y) # 2-norm error
 end
 
+# We could try to use Optimizers.jl directly on this function,
+# but Lux.jl provides a wrapper around the optimisation routine that is convenient for ML.
+# We need to make sure our loss function fits the right interface:
+# in addition to th eloss we also need to return the state and the "computed statistics",
+#  which in our case is empty.
 
-## TODO: setup a vector Newton iteration to find the desired parameters
+convex_regression_loss_lux(nn, ps, st, (x,y)) = convex_regression_loss(nn, ps, (x,y)), st, ()
+    
+
+# We can now run our optimisation routine. Here we run over 250 "epochs": this specifies the number of times
+# we do optimisation. We wrap this in a simple function that we can reuse for other examples:
+
+rng = MersenneTwister()
+opt = Adam(0.03f0)
+tstate = Lux.Experimental.TrainState(rng, nn, opt)
+
+function train(lossfunc, data, tstate, N)
+    for epoch in 1:N
+        grads, loss, stats, tstate = Lux.Training.compute_gradients(AutoZygote(), lossfunc, data, tstate)
+        if epoch % 50 == 1 || epoch == N
+            @show epoch, loss
+        end
+        tstate = Lux.Training.apply_gradients(tstate, grads)
+    end
+    tstate
+end
+
+tstate = train(convex_regression_loss_lux, (x,y), tstate, 250)
+
+# We can compare our approximation to the data and see we have successfully trained the simple neural network:
+
+plot(x, y)
+plot!(x, summation_model(nn, x, tstate.parameters))
+
+
+# **Problem (a)**  Replace `relu` in the activation function with a smooth `tanh` function and plot
+# the result. Is the approximation as accurate? What if you increase the number of epochs?
+
+## TODO: setup a neural network with a different activation
 ## SOLUTION
-predatorprey_stop(βγ) = predatorprey(βγ)[end] .- 1
 
-βγ = [1.0,1]
+nn = Dense(1 => n, tanh)
+tstate = Lux.Experimental.TrainState(rng, nn, opt)
 
-for _ = 1:10
-    βγ = βγ - ForwardDiff.jacobian(predatorprey_stop, βγ) \ predatorprey_stop(βγ)
+N = 250
+for epoch in 1:N
+    grads, loss, stats, tstate = Lux.Training.compute_gradients(AutoZygote(), convex_regression_loss_lux, (x,y), tstate)
+    if epoch % 50 == 1 || epoch == N
+        @show epoch, loss
+    end
+    tstate = Lux.Training.apply_gradients(tstate, grads)
 end
 
-plot(predatorprey(βγ))
+
+plot(x, y)
+plot!(x, summation_model(nn, x, tstate.parameters)) # much less accurate
+
+N = 20_000
+for epoch in 1:N
+    grads, loss, stats, tstate = Lux.Training.compute_gradients(AutoZygote(), convex_regression_loss_lux, (x,y), tstate)
+    if epoch % 50 == 1 || epoch == N
+        @show epoch, loss
+    end
+    tstate = Lux.Training.apply_gradients(tstate, grads)
+end
+
+# The resulting paremeters are hidden in `tstate`. We can plot the resulting approximation as follows:
+
+plot(x, y)
+plot!(x, summation_model(nn, x, tstate.parameters)) # a bit better but still far from the solution
+
+
 ## END
 
 
-# ------
-
-# ## 4.3 Automatic-differentiation of ODEs with Zygote.jl
-
-# Zygote.jl also works with automatic differentation, but it requires another package: SciMLSensitivity.
-# Here is an example of computing the derivative. The catch is its more restrictive: it requires that
-# the parameters are specified by a vector:
 
 
-using Zygote, SciMLSensitivity
 
-function pendulum_rhs_zygote!(du, 𝐮, τv, t)
-    u,v = 𝐮
-    τ = τv[1]
-    du[1] = v
-    du[2] = -sin(u) - τ*v
-end    
 
-function pendulum_friction_zygote(τ)
-    T = 10.0 # final time
-    u₀, v₀ = 1.0,1 # initial conditions
-    prob = ODEProblem(pendulum_rhs_zygote!, [u₀, v₀], (0.0, T), [τ])
-    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+# ## 4.2 Multiple layer neural networks
+
+# An effective neural network will have more than one layer. A simple example is if we want to go beyond
+# convex functions. Rather than simply summing over the neural network we can allow different weights,
+# giving us the model
+# $$
+#   𝐜^⊤ relu.(𝐚x + 𝐛) + d.
+# $$
+# Or we can think of $C = 𝐜^⊤$ as a $1 × n$ matrix. This is in fact a composition of two simple layers, the first being
+# $$
+#  x ↦ relu.(𝐚x + 𝐛)
+# $$
+# and the second being
+# $$
+#  𝐱 ↦ C 𝐱 + d
+# $$
+# i.e., they are both `Dense` layers just with different dimensions and different activation functions (`relu` and `identity`).
+# We can create such a composition using the `Chain` command:
+
+n = 100
+model = Chain(Dense(1 => n, relu), Dense(n => 1))
+
+# Here the parameters are nested. For example, we can create the relevant parameters as follows:
+
+𝐚,𝐛 = randn(n,1),randn(n)
+𝐜,d = randn(n),randn(1)
+
+st = (layer_1 = NOSTATE, layer_2 = NOSTATE) # each layer has its own state
+ps = (layer_1 = (weight = 𝐚, bias = 𝐛), layer_2 = (weight = 𝐜', bias = d))
+
+@test model([0.1], ps, st)[1] ≈ 𝐜'*relu.(𝐚*0.1 + 𝐛) + d
+
+# We can plot the model evaluated at the gri to see that it is indeed (probably) no longer convex:
+
+plot(x, vec(model(x', ps, st)[1]))
+
+# We now choose the parameters to fit data. Let's generate data for a non-convex function:
+
+x = range(-1, 1; length = n)
+y = sin.(3x).*exp.(x)
+plot(x,y)
+
+# We will fit this data by minimising the 2-norm with a different model:
+
+function regression_loss(model, ps, st, (x,y))
+    ỹ = vec(model(x', ps, st)[1])
+    norm(ỹ - y) # 2-norm error
 end
 
-pendulum_friction_zygote_stop(τ) = pendulum_friction_zygote(τ)[end][1] # find the value of u at the final time
+regression_loss_lux(model, ps, st, (x,y)) = regression_loss(model, ps, st, (x,y)), st, ()
+    
+# We now run the optimiser:
+
+opt = Adam(0.03f0)
+tstate = Lux.Experimental.TrainState(rng, model, opt)
+
+tstate = train(regression_loss_lux, (x,y), tstate, 1000)
 
 
-@test pendulum_friction_zygote_stop'(0.1) ≈ ForwardDiff.derivative(pendulum_friction_stop, 0.1)
+plot(x,y)
+plot!(x, vec(model(x', tstate.parameters, tstate.states)[1]))
+
+#  It does OK but is still not particularly impressive. The real power in neural networks is their approximation power
+# increases as we add more layers. Here let's try an example with 3-layers.
 
 
-# Now one might ask: how is Zygote.jl computing the derivative with reverse-mode automatic differentiation
-# when `pendulum_rhs_zygote!` is modifying the input, something we said is not allowed? The answer: its not.
-# Or more specifically: its computing the derivative (and indeed the pullback) using forward-mode automatic differentation.
+model = Chain(Dense(1 => n, relu), Dense(n => n, relu), Dense(n => 1))
+tstate = Lux.Experimental.TrainState(rng, model, opt)
 
+tstate = train(regression_loss_lux, (x,y), tstate, 1000)
+plot!(x, vec(model(x', tstate.parameters, tstate.states)[1]))
+
+
+# **Problem** Add a 4th layer and 5th layer, but not all involving square matrices, and compare the `relu` and `tanh`
+# activation functions. Can you choose the size of the layers to
+# match the eyeball norm? Hint: the answer might be "no" 😅
+## SOLUTION
+
+model = Chain(Dense(1 => 10, relu), Dense(10 => 20, relu), Dense(20 => 20, relu), Dense(20 => 1))
+tstate = Lux.Experimental.TrainState(rng, model, opt)
+
+tstate = train(regression_loss_lux, (x,y), tstate, 1000)
+
+plot(x,y)
+plot!(x, vec(model(x', tstate.parameters, tstate.states)[1]))
+##
+model = Chain(Dense(1 => 30, relu), Dense(30 => 30, relu), Dense(30 => 40, relu), Dense(40 => 30, relu), Dense(30 => 1))
+tstate = Lux.Experimental.TrainState(rng, model, opt)
+tstate = train(regression_loss_lux, (x,y), tstate, 10_000)
+
+plot(x,y)
+plot!(x, vec(model(x', tstate.parameters, tstate.states)[1]))
+
+##
+
+model = Chain(Dense(1 => 30, tanh), Dense(30 => 30, tanh), Dense(30 => 40, tanh), Dense(40 => 30, tanh), Dense(30 => 1))
+tstate = Lux.Experimental.TrainState(rng, model, opt)
+tstate = train(regression_loss_lux, (x,y), tstate, 10_000)
+
+plot(x,y)
+plot!(x, vec(model(x', tstate.parameters, tstate.states)[1]))
+
+## tanh doesn't perform significantly better
+
+## END

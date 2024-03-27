@@ -1,135 +1,218 @@
 # # SciML SANUM2024
-# # Lab 5: Neural Networks and Lux.jl
-#
-# In this lab we introduce neural networks as implemented in Lux.jl. 
-# A neural network (NN) is in some sense just a function with many parameters,
-# in a way that facilitates computing gradients with respect to these parameters.
-# It is constructed by composing basic building blocks usually built from linear
-# algebra operations, combined with simple _activator functions_. 
-# Here we look at the simplest case and see how the paremeters in a NN can be chosen to
-# solve optimisation problems. 
+# # Lab 5: Solving differential equations in DifferentialEquations.jl
+
+# We now consider the solution of time-evolution ordinary differential equations (ODEs) using the
+# DifferentialEquations.jl framework. An important feature is the ability to
+# use automatic-differentiation with the numerical solutions, allowing us to solve
+# simple nonlinear equations or optimisation problems involving parameters or initial conditions in the ODEs.
 
 # **Learning Outcomes**
-# 1. Single-layer neural networks and activation functions.
-# 2. Creating deeper networks as a `Chain`.
-# 3. Training neural networks by simple optimisation.
+# 1. Solving ODEs using DifferentialEquations.jl
+# 2. Differentiating an ODE with respect to parameters or initial conditions.
+# 3. Solving simple nonlinear equations or optimisation problems.
 
-using Lux, Random, Optimisers, Zygote, Plots, Test
+using DifferentialEquations, Plots, Test
+
+# ## 4.1 Solving ODEs with DifferentialEquations.jl
+
+# DifferentialEquations.jl is a powerful framework for solving many different types of equations with
+# many different types of solves, including stochastic differential equations, retarded differential equations,
+# mixed discrete-continuous equations, PDEs,  and more. Here we will focus on the simplest case of second-order
+# time-evolution ODEs, beginning with the classic pendulum equation.
 
 
-# ## Single layer neural networs
-
-# We begin with a single-layer neural network without an activator
-# function. This happens to be precisely maps of the form
+# Consider the pendulum equation with friction
 # $$
-# 𝐱 ↦ A𝐱 + 𝐛
+# u'' = τ*u' - \sin u
 # $$
-# where $A ∈ ℝ^{m × n}$ and $𝐛 ∈ ℝ^n$. The space of such maps is
-# modelled by the `Dense` type, where the `weight` corresponds to $A$
-# and the `bias` corresponds to $𝐛$. Here we see a simple example
-# of constructing the model (the space of all such maps) and evaluating
-# a specific map by specifying the paramters:
-
-m,n = 5,4
-
-model = Dense(n => m) # represents
-
-A = randn(5,4)
-b = randn(5)
-x = randn(4)
-st = NamedTuple() # no state
-val,newst = model(x, (weight=A, bias=b), st) # returns the output of the map and the "state", which we ignore
-
-@test val ≈ A*x + b # our model with these parameters is just A*x + b
-
-
-# An important feature is that we can compute gradients with respect to parameters of functions of our
-# model. Before we looked at the case where
-# we differentiated with respect to vectors but a power feature in Zygote is it works for all types like named-tuples.
-
-
-ps = (weight=A, bias=b)
-ps_grad = gradient(p -> sum(model(x, p, st)[1]), ps)[1] # returns a named tuple containing the gradients
-
-# Because our Neural Network at this stage is linear in the paremeters the gradient is actually quite simple: eg the partial derivative with
-# respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
-
-
-@test ps_grad[:weight] ≈ ones(5) * x'
-@test ps_grad[:bias] ≈ ones(5)
-
-
-
-
-# Going beyond basic linear algebra, we can apply an "activator" function $f$ to each
-# entry of the map, to represent maps of the form:
+# which we can rewrite as a first order system:
 # $$
-# 𝐱 ↦ f.(A𝐱 + 𝐛)
+# [u',v'] = [v, -τ*v - sin(u)]
 # $$
-# Where we use the Julia-like broadcast notation to mean entrywise application.
-# The classic in ML is the `relu` function which is really just $\max(0,x)$:
+# We can represent the right-hand side of this equation as a function that writes to a
+# `du` vector as follows:
 
-x = range(-1,1, 1000)
-plot(x, relu.(x); label="relu")
+function pendulum_rhs!(du, 𝐮, τ, t)
+    u,v = 𝐮
+    du[1] = v
+    du[2] = -sin(u) - τ*v
+end
 
-# We can incorporate this in our model as follows:
+# Here `τ` plays the role of a parameter: for fast time-stepping its essential that we know the types
+# at compile time and hence its much better to pass in a parameter than refer to a global variable.
+# We can now construct a representation of the ODE problem as follows:
 
-model = Dense(4 => 5, relu)
-model(x, (weight = A, bias=b), st)[1]
+τ = 0.0 # no friction
+T = 10.0 # final time
+u₀, v₀ = 1,1 # initial conditions for poistion and velocity
+prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
 
-# And we can differentiate:
+# DifferentialEquations.jl has many diferent time-steppers, we will use a simple one based on
+# an explicit Runge–Kutta method (a more efficient analogue of ode45 in Matlab):
 
-ps = (weight=A, bias=b)
-ps_grad = gradient(p -> sum(model(x, p, st)[1]), ps)[1] # returns a named tuple containing the gradients
+sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
+plot(sol)
 
-# **Problem** Derive the forumula  for the gradient of the model with an activator function and compare it with
-# the numerical result just computed. Hint: The answer depends on the output value.
+# Because we have access to automatic differentiation, we can also easily use implicit methods
+# (even though they aren't needed here):
 
-## SOLUTION
-## the partial derivative with
-## respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
+sol = solve(prob, Rodas4(), abstol = 1e-10, reltol = 1e-10)
+plot(sol)
+
+
+# **Problem** Implement a predator-prey model
+# $$
+# [x',y'] = [α*x - β*x*y, δ*x*y - γ*y]
+# $$
+# and solve the solution on $T ∈ [0,10]$ with $α , β,δ,γ = 1,2,3,4$.
+
+function predatorprey_rhs!(du, 𝐮, (α,β,δ,γ), t)
+    ## TODO: Implement the right-hand side for the predator prey model
+    ## SOLUTION
+    x,y = 𝐮
+    du[1] = α*x - β*x*y
+    du[2] = δ*x*y - γ*y
+    ## END
+end
+
+## TODO: use predatorprey_rhs! to setup an ODE and plot the solution
+## SOLUTION 
+prob = ODEProblem(predatorprey_rhs!, [u₀, v₀], (0.0, T), (1,2,3,4))
+sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
+plot(sol)
 ## END
 
-# Let's see an example directly related to a classic numerical analysis problem: approximating functions by a continuous piecewise affine
-# function, as done in the Trapezium rule. Unlike a standard approximation we do not 
+# ## 4.2 Combining auto-differentiation with DifferentialEquations.jl
+
+# The combination of automatic-differentiation and time-stepping allows for differentiating
+# with respect to parameters through an actual solve. For forward-mode automatic differentiation 
+# this is intuitive: the values at each time-step are now dual numbers. Here we see a simple
+# example using ForwardDiff.jl. Consider the problem of choosing a friction so at the end time
+# the pendulum is at the bottom (but not necessarily stationary). We can set this up as follows:
+
+
+function pendulum_friction(τ)
+    T = 10.0 # final time
+    u₀, v₀ = 1,1 # initial conditions
+    prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
+
+pendulum_friction_stop(τ) = pendulum_friction(τ)[end][1] # find the value of u at the final time
+
+pendulum_friction_stop(0.1) # value at T = 10 with friction equal to 0.1
+
+# We can immediately differentiate with respect to `τ`:
+
+using ForwardDiff
+ForwardDiff.derivative(pendulum_friction_stop, 0.1)
+
+# We can use this in a simple newton iteration to, for example, find the friction
+# that results in a desired end conditon:
+
+
+τ = 0.1
+for k = 1:10
+    τ = τ - ForwardDiff.derivative(pendulum_friction_stop, τ) \ pendulum_friction_stop(τ)
+end
+τ, pendulum_friction_stop(τ)
+
+# We see that it has successed in finding one such friction so that we end 
+# up at the bottom at the final time:
+
+plot(pendulum_friction(τ))
+
+# ------
+
+# **Problem** We can also differentiate with respect to the initial conditions.
+# Find an initial velocity such that the pendulum is at the bottom at $T = 10$ with
+# no friction, assuming $u(0) = 1$.
+
+## SOLUTION
+function pendulum_initialvelocity(v₀)
+    T = 10.0 # final time
+    prob = ODEProblem(pendulum_rhs!, [1, v₀], (0.0, T), 0)
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
+
+pendulum_initialvelocity_stop(v₀) = pendulum_initialvelocity(v₀)[end][1]
+
+v0 = 1.0
+for k = 1:10
+    v0 = v0 - ForwardDiff.derivative(pendulum_initialvelocity_stop, v0) \ pendulum_initialvelocity_stop(v0)
+end
+v0, pendulum_initialvelocity_stop(v0)
+
+plot(pendulum_initialvelocity(v0))
 
 
 
-n = 2
-model = Dense(1 => n, relu)
-A = randn(n,1)
-b = randn(n)
-st = NamedTuple() # no state
-p = x -> sum(model([x], (weight = [1;2;;], bias=[3,-1]), st)[1])
-x = range(-5,5, 100_00)
-plot(x, p.(x))
-
-n = 10
-model = Chain(Dense(n => 1), Dense(1 => n, relu))
-A = randn(n,1)
-b = randn(n)
-st = NamedTuple() # no state
-p = x -> sum(model([x], (weight = A, bias=b), st)[1])
-x = range(-5,5, 100_00)
-plot(x, p.(x))
+# **Problem** We can also compute gradients and Jacobians through solves using
+# forward-mode autmatic differentiation. For the predator and prey model, fix $α = γ = 1$
+# and initial conditions $x(0) = 1$, $y(0) = 2$.
+# Use automatic differentiation with vector Newton iteration  to choose
+# choose $β,δ$ so that $x(10) = y(10) = 1$.
 
 
+## TODO: find the parameters in predator and prey to reach the desired end condition
+## SOLUTION 
+function predatorprey(βγ)
+    β,γ = βγ
+    ## TODO: solve the 
+    ## SOLUTION
+    T = 10.0 # final time
+    prob = ODEProblem(predatorprey_rhs!, [1, 2], (0.0, T), (1,β,γ,1))
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+    ## END
+end
 
 
-model = Chain(Dense(1 => n, relu), Dense(n => 1))
-A = randn(n,1)
-B = randn(1,n)
-c = [0.0]
-st = (layer_1 = NamedTuple(), layer_2 = NamedTuple())
-p = x -> sum(model([x], (layer_1 = (weight=A, bias=b),
-                         layer_2 = (weight=B, bias=c)), st)[1])
+## TODO: setup a vector Newton iteration to find the desired parameters
+## SOLUTION
+predatorprey_stop(βγ) = predatorprey(βγ)[end] .- 1
 
-x = range(-5,5, 100_00)
-plot(x, p.(x))
+βγ = [1.0,1]
 
-rng = MersenneTwister()
+for _ = 1:10
+    βγ = βγ - ForwardDiff.jacobian(predatorprey_stop, βγ) \ predatorprey_stop(βγ)
+end
 
-Random.seed!(rng, 12345)
-opt = Adam(0.03f0)
-tstate = Lux.Training.TrainState(rng, model, opt)
-model([0.1], tstate.parameters, tstate.states)
+plot(predatorprey(βγ))
+## END
+
+
+# ------
+
+# ## 4.3 Automatic-differentiation of ODEs with Zygote.jl
+
+# Zygote.jl also works with automatic differentation, but it requires another package: SciMLSensitivity.
+# Here is an example of computing the derivative. The catch is its more restrictive: it requires that
+# the parameters are specified by a vector:
+
+
+using Zygote, SciMLSensitivity
+
+function pendulum_rhs_zygote!(du, 𝐮, τv, t)
+    u,v = 𝐮
+    τ = τv[1]
+    du[1] = v
+    du[2] = -sin(u) - τ*v
+end    
+
+function pendulum_friction_zygote(τ)
+    T = 10.0 # final time
+    u₀, v₀ = 1.0,1 # initial conditions
+    prob = ODEProblem(pendulum_rhs_zygote!, [u₀, v₀], (0.0, T), [τ])
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
+
+pendulum_friction_zygote_stop(τ) = pendulum_friction_zygote(τ)[end][1] # find the value of u at the final time
+
+
+@test pendulum_friction_zygote_stop'(0.1) ≈ ForwardDiff.derivative(pendulum_friction_stop, 0.1)
+
+
+# Now one might ask: how is Zygote.jl computing the derivative with reverse-mode automatic differentiation
+# when `pendulum_rhs_zygote!` is modifying the input, something we said is not allowed? The answer: its not.
+# Or more specifically: its computing the derivative (and indeed the pullback) using forward-mode automatic differentation.
+
