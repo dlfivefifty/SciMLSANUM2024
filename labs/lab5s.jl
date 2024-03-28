@@ -37,7 +37,7 @@ using Lux, Random, Optimization, OptimizationOptimisers, ComponentArrays, Zygote
 # information.
 
 
-## DEMO
+
 m,n = 5,4
 
 model = Dense(n => m) # represents maps of the form 𝐱 ↦ A𝐱 + 𝐛
@@ -47,7 +47,7 @@ b = randn(5)
 x = randn(4)
 const NOSTATE = NamedTuple() # no state for our NN
 val,newst = model(x, (weight=A, bias=b), NOSTATE) # returns the output of the map and the updated state, which we ignore
-## END
+
 
 @test val == A*x + b # our model with these parameters is just A*x + b
 

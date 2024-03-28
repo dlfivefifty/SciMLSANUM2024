@@ -37,7 +37,7 @@ using Lux, Random, Optimization, OptimizationOptimisers, ComponentArrays, Zygote
 # information.
 
 
-## DEMO
+
 m,n = 5,4
 
 model = Dense(n => m) # represents maps of the form 𝐱 ↦ A𝐱 + 𝐛
@@ -47,7 +47,7 @@ b = randn(5)
 x = randn(4)
 const NOSTATE = NamedTuple() # no state for our NN
 val,newst = model(x, (weight=A, bias=b), NOSTATE) # returns the output of the map and the updated state, which we ignore
-## END
+
 
 @test val == A*x + b # our model with these parameters is just A*x + b
 
@@ -95,14 +95,7 @@ ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named t
 # the numerical result just computed. Hint: The answer depends on the output value.
 
 ## TODO: Compute the gradient by hand, matching ps_grad
-## SOLUTION
-## We just need to filter by the sign of the output:
-s = (1 .+ sign.(A*x + b))/2
 
-@test ps_grad[:weight] ≈ s * x'
-@test ps_grad[:bias] ≈ s
-
-## END
 
 # Let's see an example directly related to a classic numerical analysis problem: approximating 
 # functions by a continuous piecewise affine
@@ -166,38 +159,7 @@ plot!(x, summation_model(ret.u, (nn, x)))
 # What if you construct your own function that is a smooth approximation to `relu`?
 
 ## TODO: setup a neural network with different activations
-## SOLUTION
 
-nn = Dense(1 => n, tanh)
-ps = ComponentArray(Lux.setup(rng, nn)[1]) 
-prob = OptimizationProblem(OptimizationFunction(convex_regression_loss, Optimization.AutoZygote()), ps, (nn, (x, y)))
-@time ret = solve(prob, Adam(0.03), maxiters=250)
-
-plot(x, y)
-plot!(x, summation_model(ret.u, (nn, x))) # much less accurate
-
-#
-@time ret = solve(prob, Adam(0.03), maxiters=1000)
-
-plot(x, y)
-plot!(x, summation_model(ret.u, (nn, x))) # still not accurate
-
-#
-# We can use the following smooth step:
-
-smoothstep = x -> x*(tanh(10x) + 1)/2
-plot(x,smoothstep.(x))
-
-nn = Dense(1 => n, smoothstep)
-ps = ComponentArray(Lux.setup(rng, nn)[1]) 
-prob = OptimizationProblem(OptimizationFunction(convex_regression_loss, Optimization.AutoZygote()), ps, (nn, (x, y)))
-@time ret = solve(prob, Adam(0.03), maxiters=2000)
-
-plot(x, y)
-plot!(x, summation_model(ret.u, (nn, x))) # much more accurate than other results.
-
-
-## END
 
 
 
@@ -278,34 +240,3 @@ plot!(x, vec(model(x', ret.u, st)[1]))
 # **Problem 3** Add a 4th layer and 5th layer, but not all involving square matrices. 
 # Can you choose the size of the layers and the activation functions to
 # match the eyeball norm? Hint: the answer might be "no" 😅 But maybe "ballpark norm" is sufficient.
-## SOLUTION
-
-model = Chain(Dense(1 => 100, relu), Dense(100 => 50, relu), Dense(50 => 50, relu), Dense(50 => 1))
-ps,st = Lux.setup(rng, model)
-prob = OptimizationProblem(OptimizationFunction(regression_loss, Optimization.AutoZygote()), ComponentArray(ps), (model, st, (x, y)))
-@time ret = solve(prob, Adam(0.03), maxiters=1000)
-
-plot(x,y)
-plot!(x, vec(model(x', ret.u, st)[1]))
-
-##
-model = Chain(Dense(1 => 30, relu), Dense(30 => 30, relu), Dense(30 => 40, relu), Dense(40 => 30, relu), Dense(30 => 1))
-ps,st = Lux.setup(rng, model)
-prob = OptimizationProblem(OptimizationFunction(regression_loss, Optimization.AutoZygote()), ComponentArray(ps), (model, st, (x, y)))
-@time ret = solve(prob, Adam(0.03), maxiters=1000)
-
-plot(x,y)
-plot!(x, vec(model(x', ret.u, st)[1]))
-
-##
-
-model = Chain(Dense(1 => 30, smoothstep), Dense(30 => 30, smoothstep), Dense(30 => 40, smoothstep), Dense(40 => 30, smoothstep), Dense(30 => 1))
-
-ps,st = Lux.setup(rng, model)
-prob = OptimizationProblem(OptimizationFunction(regression_loss, Optimization.AutoZygote()), ComponentArray(ps), (model, st, (x, y)))
-@time ret = solve(prob, Adam(0.02), maxiters=3000)
-
-plot(x,y)
-plot!(x, vec(model(x', ret.u, st)[1])) # Just about achieves eyeball norm.
-
-## END
