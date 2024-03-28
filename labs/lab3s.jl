@@ -28,9 +28,9 @@
 
 using Zygote, LinearAlgebra, Test
 
-## DEMO
+
 @test cos'(0.1) ≈ -sin(0.1) # Differentiates cos using reverse-mode autodiff
-## END
+
 
 # The real power of Zygote.jl is computing gradients (or more generally, Jacobians
 # of $f : ℝ^m → ℝ^n$ where $n ≪ m$). We can compute a gradient of the function we considered before as follows:
@@ -43,27 +43,27 @@ f = function(x)
     ret
 end
 
-## DEMO
+
 x = randn(5)
 Zygote.gradient(f,x)
-## END
+
 
 # Unlike ForwardDiff.jl, the gradient returns a tuple since multiple arguments are supported in addition
 # to vector inputs, eg:
 
-## DEMO
+
 x,y = 0.1, 0.2
 @test all(Zygote.gradient((x,y) -> cos(x*exp(y)), x, y) .≈ [-sin(x*exp(y))*exp(y), -sin(x*exp(y))*x*exp(y)])
-## END
+
 
 # Now differentiating this function is not particularly faster than ForwardDiff.jl:
 
-## DEMO
+
 x = randn(1000)
 @time Zygote.gradient(f, x);
 x = randn(10_000)
 @time Zygote.gradient(f, x); # roughly 200x slower
-## END
+
 
 # This is because not all operations are ameniable to reverse-mode differentiation as implemented in Zygote.jl.
 # However, if we restrict to vectorised operations we see a dramatic improvement:
@@ -112,9 +112,9 @@ Zygote.gradient(f!,x) # errors out
 # $$
 # We can compute pullbacks using the `pullback` routine:
 
-## DEMO
+
 s, p_sin = pullback(sin, 0.1)
-## END
+
 
 # `p_sin` contains the map $t ↦ \cos(0.1) t$. Since pullbacks support multiple arguments
 # it actually returns a tuple with a single entry:
@@ -157,7 +157,7 @@ p_sin(1)
 
 # Let's see pullbacks in action for computing the derivative of $\cos\sqrt{{\rm e}^x}$:
 
-## DEMO
+
 x = 0.1 # point we want to differentiate
 y,p₁ = pullback(exp, x) 
 z,p₂ = pullback(sqrt, y) # y is exp(x)
@@ -166,7 +166,7 @@ w,p₃ = pullback(cos, z) # z is sqrt(exp(x))
 @test w == cos(sqrt(exp(x)))
 
 @test p₁(p₂(p₃(1)...)...)[1] ≈ p₃(p₂(p₁(1)...)...)[1] ≈ -sin(sqrt(exp(x)))*exp(x)/(2sqrt(exp(x)))
-## END
+
 
 # We can see how this can lead to an approach for automatic differentiation.
 # For example, consider the following function composing `sin` over and over:
@@ -183,7 +183,7 @@ end
 # But the number of such pullbacks grows only linearly so this is acceptable. So thus
 # at a high-level we can think of Zygote as running through and computing all the pullbacks:
 
-## DEMO
+
 n = 5
 x = 0.1 # input
 
@@ -194,18 +194,18 @@ for k = 1:n
     push!(pullbacks, pₖ)
 end
 r # value
-## END
+
 
 # To deduce the derivative we need can either do forward- or back-propogation by looping through our pullbacks
 # either in forward- or in reverse-order. Here we implement back-propagation:
 
-## DEMO
+
 reverse_der = 1 # we always initialise with the trivial scaling
 for k = n:-1:1
     reverse_der = pullbacks[k](reverse_der)[1]
 end
 @test reverse_der ≈ (x -> manysin(n, x))'(x)
-## END
+
 
 # Zygote constructs code that is equivalent to this loop automatically, 
 # constructing a high-performance version of this back-propogation loop at compile time using something called source-to-source
@@ -361,7 +361,7 @@ end
 # $$
 # and summing over the result, eg. computing $[1,1,1]^⊤(\underbrace{𝐟 ∘ ⋯ ∘ 𝐟}_{n\hbox{ times}})(𝐱)$.
 # We implement this with a general function `iteratef`:
-## DEMO
+
 𝐟 = function(𝐱)
     (x,y,z) = 𝐱
     [cos(x*y)+z, z*y-sin(x), x + y + z]
@@ -375,7 +375,7 @@ function iteratef(𝐱, 𝐟, n)
 end
 
 gradient(iteratef, [0.1,0.2,0.3] , 𝐟, 5)[1] # computes the gradient of 5 iterations
-## END
+
 
 # To get an idea how this works behind the scenes we can again accumulate the pullbacks:
 
@@ -524,7 +524,7 @@ end
 # compute gradients even
 # with a million degrees of freedom, way beyond what could ever be done with forward-mode automatic differentiation:
 
-## DEMO
+
 n = 1_000_000
 f = (x,α) -> (x'x + 2x[1:end-1]'*(x[2:end] ./ (2:length(x)).^α)) - 2sum(x)
 
@@ -533,7 +533,7 @@ f = (x,α) -> (x'x + 2x[1:end-1]'*(x[2:end] ./ (2:length(x)).^α)) - 2sum(x)
 x = randn(n) # initial guess
 Zygote.gradient(f, x, 2) # compile
 @time Zygote.gradient(f, x, 2)
-## END
+
 
 # For concreteness we first implement our own version of a quick-and-dirty gradient descent:
 # $$

@@ -21,7 +21,9 @@ function compilelabdemo(k)
 end
 
 function compilelabsolution(k)
-    Literate.notebook("src/labs/lab$(k)s.jl", "labs/"; execute=false)
+    str = read("src/labs/lab$(k)s.jl", String)
+    write("labs/lab$(k)s.jl", replace(str, r"## DEMO(.*?)## END"s => s"\1"))
+    Literate.notebook("labs/lab$(k)s.jl", "labs/"; execute=false)
 end
 
 
