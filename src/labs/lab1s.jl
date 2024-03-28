@@ -40,16 +40,19 @@ using Test
 # Let's make a function that takes in a 
 # single number $x$ and returns $x^2$.  
 
-
+## DEMO
 function sq(x)
    x^2 
 end
 sq(2), sq(3)
+## END
 
 # There is also a convenient syntax for defining functions on
 # one line, e.g., we can also write
 
+## DEMO
 sq(x) = x^2
+## END
 
 
 
@@ -57,12 +60,14 @@ sq(x) = x^2
 # Here's a function that takes in 3 arguments and returns the average.  
 # (We write it on 3 lines only to show that functions can take multiple lines.)
 
+## DEMO
 function av(x, y, z)
     ret = x + y
     ret = ret + z
     ret/3
 end
 av(1, 2, 3)
+## END
 
 # **Remark**: Julia is a compiled language: the first time we run a command on a specific type it compiles for that type.
 # The second time it is called on a type it reuses the precompiled function.
@@ -94,6 +99,7 @@ av2(2, 2, 2) # uses x = 5 from outside function
 # It demonstrates that functions can take in  other functions as inputs
 # and shows the syntax for a for-loop:
 
+## DEMO
 function rightrectangularrule(f, n) # create a function named "rightrectangularrule" that takes in two arguments
     ret = 0.0
     for j = 1:n
@@ -103,8 +109,8 @@ function rightrectangularrule(f, n) # create a function named "rightrectangularr
 end # like for-loops, functions are finished with an end
 
 rightrectangularrule(exp, 100_000_000) # Use n = 100 million points to get an approximation accurate to 8 digits.
-                                      ## The underscores in numbers are like commas and are ignored.
-
+## The underscores in numbers are like commas and are ignored.
+## END
 
 
 # ### Anonymous (lambda) functions
@@ -112,10 +118,12 @@ rightrectangularrule(exp, 100_000_000) # Use n = 100 million points to get an ap
 # It is possible to make unnamed anonymous functions,
 # with two variants on syntax:
 
+## DEMO
 f = x -> x^2
 g = function(x)
     x^2
 end
+## END
 
 # There is not much difference between named and anonymous functions,
 # both are compiled in the same manner. The only difference is
@@ -153,9 +161,8 @@ end
 
 ## TODO: use an anonymous function to represent the function cos(x^2) and approximate its integral.
 ## SOLUTION
-
-## END
 leftrectangularrule(x -> cos(x^2), 10_000_000) # 0.9045242608850343
+## END
 # ----
 
 # ## 1.2 Types in Julia
@@ -165,30 +172,38 @@ leftrectangularrule(x -> cos(x^2), 10_000_000) # 0.9045242608850343
 # for example, a number.
 # By default when we write an integer (e.g. `-123`) it is of type `Int`:
 
+## DEMO
 typeof(5)
+## END
 
 # On a 64-bit machine this will print `Int64`, where the `64` indicates it is using precisely 64 bits
 # to represent the number. If we write something with
 # a decimal point it represents a "real" number, whose storage is of type `Float64`:
 
+## DEMO
 typeof(5.3)
+## END
 
 # This is  a floating point number, and again the `64` indicates it is using precisely
 # 64 bits to represent this number. Note that some operations involving `Int`s return `Float64`s:
 
+## DEMO
 1/5 # 1 and 5 are Int but output is a Float64
+## END
 
 # It is possible to have functions behave differently depending on the input type.
 # To do so we can add a restriction denoted `::Int` or `::Float64` to the function "signature".
 # Here we create a function `foo` that is equal to `1` if the input is an `Int`, `0` if the input is
 # a `Float64`, and `-1` otherwise:
 
+## DEMO
 foo(x::Int) = 1 # The ::Int means this version is called when the input is an Int
 foo(x::Float64) = 0
 foo(x) = -1 # This is equivalent to f(x::Any) = -1
-            ## Anything that is not an Int or Float64 will call this
+## Anything that is not an Int or Float64 will call this
 
 foo(3), foo(2.5), foo("hi"), foo(3.0)
+## END
 
 
 # The last line returns a list of `Int`s, which has the type `Tuple`.
@@ -202,21 +217,29 @@ foo(3), foo(2.5), foo("hi"), foo(3.0)
 # to represent the complex number $x + {\rm i} y$. In Julia ${\rm i} = \sqrt{-1}$ is denoted `im` and
 # hence we can create a complex number like $1+2{\rm i}$ as follows:
 
+## DEMO
 z = 1 + 2im
+## END
 
 # This complex number has two "fields": the real and imaginary part. Accessing the fields is done
 # using a `.`, here we display the real and imaginary parts as a `Tuple`:
 
+## DEMO
 z.re, z.im
+## END
 
 # When we ask  its type we see it is a `Complex{Int}`:
 
+## DEMO
 typeof(z)
+## END
 
 # The `{Int}` indicates that each of the fields is an `Int`.
 # Note we can add, subtract, multiply, or apply functions like `exp` to complex numbers:
 
+## DEMO
 exp(2z^2 + 3im)
+## END
 
 # ### Supertypes
 
@@ -226,10 +249,12 @@ exp(2z^2 + 3im)
 # `Real`. Which is a subtype of `Number`. Which, as is everything, a subtype of `Any`. We can see this with the
 # `supertype` function:
 
+## DEMO
 @show supertype(Float64) # AbstractFloat, representing general floats
 @show supertype(AbstractFloat) # Real, representing real numbers
 @show supertype(Real)
 @show supertype(Number); # Any, the supertype of all types.
+## END
 
 # -----
 # **Problem 2(a)** Use `typeof` to determine the type of `1.2 + 2.3im`.
@@ -295,27 +320,34 @@ end
 # (For simplicity  we won't worry about restricting $p$ and $q$ to be `Int`.)
 # We can construct such a type using the `struct` keyword:
 
+## DEMO
 struct Rat
     p
     q
 end
+## END
 
 # A new instance of `Rat` is created via e.g. `Rat(1, 2)` represents 1/2
 # where the first argument specifies `p` and the second argument `q`.
 # The fields are accessed by `.`:
 
+## DEMO
 x = Rat(1, 2) # Rat(1, 2) creates an instance with fields equal to the input
 @test x.p == 1
 @test x.q == 2
+## END
 
 # Unfortunately we can't actually do anything with this type, yet:
 
+## DEMO
 x + x
+## END
 
 # The error is telling us to overload the `+` function when the inputs are both `Rat`.
 # To do this we need to "import" the `+` function and then we can overload it like any
 # other function:
 
+## DEMO
 import Base: + # allows us to overload +
 
 ## Here putting ::Rat after both x and y means this version of +
@@ -327,14 +359,17 @@ function +(x::Rat, y::Rat)
 end
 
 Rat(1,2) + Rat(3,4) # 1/2 + 3/4 == 10/8 (== 5/4) which is represented
-                    ## as Rat(10, 8)
+## as Rat(10, 8)
+## END
 
 # We can support mixing `Rat` and `Int` by adding additional functionality:
 
+## DEMO
 Rat(p::Int) = Rat(p,1) # an Int is converted to p/1
 +(x::Rat, y::Int) = x + Rat(y) # To add a Rat to an Int we convert the Int into a Rat and use the previously defined +
 
 Rat(1,2) + 1  # 1 + 1/2 == 3/2
+## END
 
 # -----
 
@@ -402,16 +437,20 @@ end
 # This also works for matrices: `zeros(Int, 10, 5)` creates a 10 × 5 matrix of all zeros,
 # and `[k^2 + j for k=1:3, j=1:4]` creates the following:
 
+## DEMO
 [k^2 + j for k=1:3, j=1:4] # k is the row, j is the column
+## END
 
 # Note sometimes it is best to create a vector/matrix and populate it. For example, the
 # previous matrix could also been constructed as follows:
 
+## DEMO
 A = zeros(Int, 3, 4) # create a 3 × 4 matrix whose entries are 0 (as Ints)
 for k = 1:3, j = 1:4
     A[k,j] = k^2 + j # set the entries of A
 end
 A
+## END
 
 # **Remark** Julia uses 1-based indexing where the first index of a vector/matrix
 # is 1. This is standard in all mathematical programming languages (Fortran, Maple, Matlab, Mathematica)
@@ -423,8 +462,10 @@ A
 # type. It will attempt to convert an assignment to the right type but will throw
 # an error if not successful:
 
+## DEMO
 A[2,3] = 2.0 # works because 2.0 is a Float64 that is exactly equal to an Int
 A[1,2] = 2.3 # fails since 2.3 is a Float64 that cannot be converted to an Int
+## END
 
 
 # ------
@@ -432,7 +473,6 @@ A[1,2] = 2.3 # fails since 2.3 is a Float64 that cannot be converted to an Int
 # one in all entries. Hint: use a for-loop, `ones`, `fill`, or a comprehension.
 ## TODO: Create a matrix of ones, 4 different ways
 ## SOLUTION
-
 ## 1. For-loop:
 
 ret = zeros(Int, 5, 6)
@@ -452,8 +492,6 @@ fill(1, 5, 6)
 ## 4. Comprehension:
 
 [1 for k=1:5, j=1:6]
-
-
 ## END
 
 # **Problem 5(b)** Create a 1 × 5 `Matrix{Int}` with entries `A[k,j] = j`. Hint: use a for-loop or a comprehension.
@@ -488,29 +526,32 @@ Matrix((1:5)')
 # equivalent to a transpose when the entries are real).
 # This is done _lazily_: they return custom types `Transpose` or
 # `Adjoint` that just wrap the input array and reinterpret the entries.
-# This is equivalent to
-# _row-major_ format, where the next address in memory of `transpose(A)` corresponds to
-# moving along the row.
 # Here is a simple example:
 
+## DEMO
 A = [1+im  2  3;
-     4     5  6;
-     6     8  9]
+4     5  6;
+6     8  9]
 
 A' # adjoint (conjugate-transpose). If entries are real it is equivalent to transpose(A)
+## END
 
 # If we change entries of `A'` it actually changes entries of `A` too since
 # they are pointing to the same locations in memory, just interpreting the data differently:
 
+## DEMO
 A'[1,2] = 2+im
 A # A[2,1] is now 2-im
+## END
 
 # Note vector adjoints/transposes behave differently than 1 × n matrices: they are
 # more like row-vectors. For example the following computes the dot product of two vectors:
 
+## DEMO
 x = [1,2,3]
 y = [4,5,6]
 x'y # equivalent to dot(x,y), i.e. the standard dot product.
+## END
 
 # ### Broadcasting
 
@@ -519,8 +560,10 @@ x'y # equivalent to dot(x,y), i.e. the standard dot product.
 # By adding `.` to the end of a function we "broadcast" the function over
 # a vector:
 
+## DEMO
 x = [1,2,3]
 cos.(x) # equivalent to [cos(1), cos(2), cos(3)], or can be written broadcast(cos, x)
+## END
 
 # Broadcasting has some interesting behaviour for matrices.
 # If one dimension of a matrix (or vector) is `1`, it automatically
@@ -528,10 +571,11 @@ cos.(x) # equivalent to [cos(1), cos(2), cos(3)], or can be written broadcast(co
 # In the following we use broadcasting to pointwise-multiply a column and row
 # vector to make a matrix:
 
+## DEMO
 a = [1,2,3]
 b = [4,5]
-
 a .* b'
+## END
 
 # Since `size([1,2,3],2) == 1` it repeats the same vector to match the size
 # `size([4,5]',2) == 2`. Similarly, `[4,5]'` is repeated 3 times. So the
@@ -548,8 +592,10 @@ A .* B # equals the above a .* b'
 
 # Note we can also use matrix broadcasting with our own functions:
 
+## DEMO
 f = (x,y) -> cos(x + 2y)
 f.(a, b') # makes a matrix with entries [f(1,4) f(1,5); f(2,4) f(2,5); f(3,4) f(3.5)]
+## END
 
 
 # ### Ranges
