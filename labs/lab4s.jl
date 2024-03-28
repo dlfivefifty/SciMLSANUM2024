@@ -11,7 +11,7 @@
 # 2. Differentiating an ODE with respect to parameters or initial conditions.
 # 3. Solving simple nonlinear equations or optimisation problems involving paramters in an ODE.
 
-using DifferentialEquations, Plots, Test
+using DifferentialEquations, Plots, LinearAlgebra, Test
 
 # ## 4.1 Solving ODEs with DifferentialEquations.jl
 
@@ -30,7 +30,7 @@ using DifferentialEquations, Plots, Test
 # \begin{bmatrix}
 #    u' \\
 #    v'
-#    \end{bmatrix} = \begin{bmatrix} v \\ -τ*v - \sin u \end{bmatrix}
+#    \end{bmatrix} = \begin{bmatrix} v \\ -τv - \sin u \end{bmatrix}
 # $$
 # We can represent the right-hand side of this equation as a function that writes to a
 # `du` vector (thus avoiding allocations) as follows:
@@ -70,7 +70,8 @@ plot(sol)
 # $$
 # on $T ∈ [0,10]$ with $α , β,δ,γ = 1,2,3,4$ with initial condition $[1,2]$.
 
-function predatorprey_rhs!(du, 𝐮, (α,β,δ,γ), t)
+function predatorprey_rhs!(du, 𝐮, ps, t)
+    (α,β,δ,γ) = ps
     ## TODO: Implement the right-hand side for the predator prey model
     ## SOLUTION
     x,y = 𝐮
@@ -188,7 +189,7 @@ plot(predatorprey(βγ))
 # ## 4.3 Automatic-differentiation of ODEs with Zygote.jl
 
 # Zygote.jl also works with automatic differentation, but it requires another package: SciMLSensitivity.
-# Here is an example of computing the derivative. The catch is its more restrictive: it requires that
+# Here is an example of computing the derivative. The catch is its more restrictive, in particular it requires that
 # the parameters are specified by a vector:
 
 
@@ -217,4 +218,62 @@ pendulum_friction_zygote_stop(τ) = pendulum_friction_zygote(τ)[end][1] # find 
 # Now one might ask: how is Zygote.jl computing the derivative with reverse-mode automatic differentiation
 # when `pendulum_rhs_zygote!` is modifying the input, something we said is not allowed? The answer: its not.
 # Or more specifically: its computing the derivative (and indeed the pullback) using forward-mode automatic differentation.
+# But we can still use it for efficiently computing gradients and optimising.
 
+# Here is an example of the pendulum equation where we allow for a piecewise-constant frictions and optimise their values so the final solution
+# has roughly the same position and velocity as we started with. We first setup the problem and show we can
+# compute gradients:
+
+
+
+function pendulum_rhs_zygote!(du, 𝐮, τs, t)
+    u,v = 𝐮
+    τ = τs[max(1,ceil(Int, 10t))]
+    du[1] = v
+    du[2] = -sin(u) - τ*v
+end    
+
+function pendulum_friction_vec(τs)
+    T = 10.0 # final time
+    u₀, v₀ = 1.0,1 # initial conditions
+    prob = ODEProblem(pendulum_rhs_zygote!, [u₀, v₀], (0.0, T), τs)
+     solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
+
+## We include an extra unused argument for parameters.
+pendulum_friction_loss(τs, _) = norm(pendulum_friction_vec(τs)[end] .- 1) # find the value of u at the final time
+
+## We can compute the gradient
+@time gradient(pendulum_friction_loss, randn(100), ())
+
+# This can then be used an optimisation:
+
+using Optimization, OptimizationOptimisers
+prob = OptimizationProblem(OptimizationFunction(pendulum_friction_loss, Optimization.AutoZygote()), randn(100), ())
+@time ret = solve(prob, Adam(0.03), maxiters=100)
+plot(pendulum_friction_vec(ret.u))
+
+
+# **Problem 4** For the predator-prey model, Choose $α,β,γ,δ$ to try to minimize the 2-norm of $x(t) - 1$ evaluated at
+# the integer samples $t = 1,…,10$ using the initial condition $[x(0),y(0)] = [2,1]$. Hint: using `u = solve(...; saveat=1:10)` will cause `u.u` to contain the solution
+# at the specified times. Different initial guesses will find different local minimum.
+
+## SOLUTION
+
+
+function predatorprey(ps)
+    prob = ODEProblem(predatorprey_rhs!, [2.,1.], (0.0, 10.0), ps)
+    solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10, saveat=1:10)
+end
+
+function predatorprey_norm(ps, _)
+    u = predatorprey(ps)
+    norm(first.(u.u) .- 1)
+end
+
+prob = OptimizationProblem(OptimizationFunction(predatorprey_norm, Optimization.AutoZygote()), [1.0,0.1,0.1,1], ())
+@time ret = solve(prob, Adam(0.03), maxiters=300)
+plot(predatorprey(ret.u))
+
+
+## END
