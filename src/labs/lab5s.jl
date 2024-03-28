@@ -1,5 +1,5 @@
 # # SciML SANUM2024
-# # Lab 4: Neural Networks and Lux.jl
+# # Lab 5: Neural Networks and Lux.jl
 #
 # In this lab we introduce neural networks as implemented in Lux.jl. 
 # A neural network (NN) is in some sense just a function with many parameters

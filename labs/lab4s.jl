@@ -72,11 +72,19 @@ plot(sol)
 
 function predatorprey_rhs!(du, 𝐮, (α,β,δ,γ), t)
     ## TODO: Implement the right-hand side for the predator prey model
-    
+    ## SOLUTION
+    x,y = 𝐮
+    du[1] = α*x - β*x*y
+    du[2] = δ*x*y - γ*y
+    ## END
 end
 
 ## TODO: use predatorprey_rhs! to setup an ODE and plot the solution
-
+## SOLUTION 
+prob = ODEProblem(predatorprey_rhs!, [u₀, v₀], (0.0, T), (1,2,3,4))
+sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
+plot(sol)
+## END
 
 # ------
 
@@ -128,7 +136,23 @@ plot(pendulum_friction(τ))
 # no friction, assuming $u(0) = 1$.
 
 ## TODO: Setup a function taking in the initial velocity and find the initial velocity so we end at rest.
+## SOLUTION
+function pendulum_initialvelocity(v₀)
+    T = 10.0 # final time
+    prob = ODEProblem(pendulum_rhs!, [1, v₀], (0.0, T), 0)
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
 
+pendulum_initialvelocity_stop(v₀) = pendulum_initialvelocity(v₀)[end][1]
+
+v0 = 1.0
+for k = 1:10
+    v0 = v0 - ForwardDiff.derivative(pendulum_initialvelocity_stop, v0) \ pendulum_initialvelocity_stop(v0)
+end
+v0, pendulum_initialvelocity_stop(v0)
+
+plot(pendulum_initialvelocity(v0))
+## END
 
 
 # **Problem 3** We can also compute gradients and Jacobians through solves using
@@ -139,7 +163,24 @@ plot(pendulum_friction(τ))
 
 
 ## TODO: find the parameters in predator and prey to reach the desired end condition
+## SOLUTION 
+function predatorprey(βγ)
+    β,γ = βγ
+    T = 10.0 # final time
+    prob = ODEProblem(predatorprey_rhs!, [1, 2], (0.0, T), (1,β,γ,1))
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+end
 
+predatorprey_stop(βγ) = predatorprey(βγ)[end] .- 1
+
+βγ = [1.0,1]
+
+for _ = 1:10
+    βγ = βγ - ForwardDiff.jacobian(predatorprey_stop, βγ) \ predatorprey_stop(βγ)
+end
+
+plot(predatorprey(βγ))
+## END
 
 
 # ------
