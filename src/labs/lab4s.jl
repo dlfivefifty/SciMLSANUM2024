@@ -50,14 +50,16 @@ T = 10.0 # final time
 u₀, v₀ = 1,1 # initial conditions for poistion and velocity
 prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
 
-# DifferentialEquations.jl has many diferent time-steppers, we will use a simple one based on
-# an explicit Runge–Kutta method (a more efficient analogue of ode45 in Matlab):
+# We can find the solution to the problem as follows:
 
-sol = solve(prob, Tsit5(), abstol = 1e-10, reltol = 1e-10)
+sol = solve(prob)
 plot(sol)
 
+# DifferentialEquations.jl has many diferent time-steppers, eg, `Tsit5()` is 
+# an explicit Runge–Kutta method (a more efficient analogue of ode45 in Matlab).
 # Because we have access to automatic differentiation, we can also easily use implicit methods
-# (even though they aren't needed here):
+# (even though they aren't needed here). Here's the same problem using an implicit method\
+# with tolerances specified:
 
 sol = solve(prob, Rodas4(), abstol = 1e-10, reltol = 1e-10)
 plot(sol)
@@ -255,7 +257,7 @@ plot(pendulum_friction_vec(ret.u))
 
 
 # **Problem 4** For the predator-prey model, Choose $α,β,γ,δ$ to try to minimize the 2-norm of $x(t) - 1$ evaluated at
-# the integer samples $t = 1,…,10$ using the initial condition $[x(0),y(0)] = [2,1]$. Hint: using `u = solve(...; saveat=1:10)` will cause `u.u` to contain the solution
+# the integer samples $t = 1,…,10$ using the initial condition $[x(0),y(0)] = [2,1]$. Hint: using `u = solve(...; saveat=1:10)` will cause `Vector(u)` to contain the solution
 # at the specified times. Different initial guesses will find different local minimum.
 
 ## SOLUTION
@@ -268,7 +270,7 @@ end
 
 function predatorprey_norm(ps, _)
     u = predatorprey(ps)
-    norm(first.(u.u) .- 1)
+    norm(first.(Vector(u)) .- 1)
 end
 
 prob = OptimizationProblem(OptimizationFunction(predatorprey_norm, Optimization.AutoZygote()), [1.0,0.1,0.1,1], ())
