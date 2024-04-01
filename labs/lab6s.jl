@@ -16,11 +16,6 @@
 # in clinical trial accelleration for vaccine development by Moderna,
 # climate change modelling and COVID prediction, see the [SciML Schowcase](https://sciml.ai/showcase/).
 
-# **Learning Outcomes**
-# 1. Combining neural networks and differential equations.
-# 2. Deducing dynamics by training a neural network.
-# 3. Using multiple optimisers to get good approximations.
-
 using Lux, DifferentialEquations, Optimization, OptimizationOptimisers, Plots, Zygote, SciMLSensitivity, ComponentArrays, Random, LinearAlgebra, Test
 
 

@@ -4,7 +4,7 @@
 # In this lab we explore a simple approach to computing derivatives:
 # _dual numbers_. This is a special mathematical object akin to complex numbers
 # that allows us to compute derivatives to very high accuracy in an automated fashion,
-# and is an example of forward mode [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+# and is an example of forward-mode [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
 # To realise dual numbers on a computer we need to introduce the notation of a "type"
 # and create a customised type to represent dual numbers, which is what we discuss first.
 # For functions of multiple variables we can extend the concept of dual numbers to computing gradients
@@ -225,7 +225,52 @@ contdual = cont(1000,0.1+ϵ)
 contdual.b
 ## END
 
+# **Problem 2** Consider a simple forward Euler method approximating the solution to the Pendulum equation with friction:
+# $$
+# u'' = τ u' - \sin u
+# $$
+# which we can rewrite as a first order system:
+# $$
+# \begin{bmatrix}
+#    u' \\
+#    v'
+#    \end{bmatrix} = \begin{bmatrix} v \\ -τ*v - \sin u \end{bmatrix}
+# $$
+# That is, we want to implement the iteration
+# $$
+# 𝐮_{k+1} = 𝐮_k + h*\begin{bmatrix} 𝐮_k[2] \\ -τ 𝐮_k[2] - \sin 𝐮_k[1] \end{bmatrix}
+# $$
+# with a specified initial condition $𝐮_0$. For $N = 100$, $h = 0.1$ and $𝐮_0 = [0.1,0.2]$, differentiate
+# the solution with-respect to $τ$ at $τ = 1$ using dual numbers.
+# Hint: check your result by comparing to a divided difference.
 
+## TODO: Differentiate through an ODE solve using dual nubmers
+## SOLUTION
+𝐟 = function(h, 𝐱)
+    (τ,u,v) = 𝐱
+    [τ,u + h*v, v + h*(-τ*v - sin(u))]
+end
+
+function forwardeuler(τ, 𝐮₀, 𝐟, h, n)
+    𝐱 = [τ; 𝐮₀]
+    for k = 1:n
+        𝐱 = 𝐟(h, 𝐱)
+    end
+    𝐱[2]
+end
+
+
+## we need a few more overloads:
+*(x::Dual, y::Number) = x * Dual(y)
+*(x::Number, y::Dual) = Dual(x) * y
+-(x::Dual, y::Number) = x - Dual(y)
+
+
+der = forwardeuler(Dual(1.0,1.0),[0.1,0.2], 𝐟, 0.1, 100).b
+h = sqrt(eps())
+divd = (forwardeuler(1+h,[0.1,0.2], 𝐟, 0.1, 100)-forwardeuler(1,[0.1,0.2], 𝐟, 0.1, 100))/h
+@test der ≈ divd atol=1E-8
+## END
 
 # -------
 
@@ -263,7 +308,7 @@ contdual.b
 
 # -------
 
-# **Problem 2** 
+# **Problem 3** 
 # Complete the following implementation of `Dual2D` supporting `+` and `*` (and
 # assuming `a,b,c` are `Float64`).
 
@@ -377,7 +422,7 @@ x,y = 0.1,0.2
 
 # -----
 
-# **Problem 3** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Toda Hamiltonian
+# **Problem 4** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Toda Hamiltonian
 # $$
 #   f([x_1, …, x_n, y_1, …, y_n]) =  {1 \over 2} ∑_{k=1}^n y_k^2 + ∑_{k=1}^{n-1} \exp(x_k - x_{k+1})
 # $$
@@ -439,7 +484,7 @@ f(r)
 # -----
 
 
-# **Problem 4(a)** Use `newton` with a complex number to compute
+# **Problem 5(a)** Use `newton` with a complex number to compute
 # an approximation to a complex root of $f(x) = x^5 - x^2 + 1$.
 # Verify the approximation is accurate by testing that it satisfies $f(r)$
 # is approximately zero.
@@ -451,7 +496,7 @@ r = newton(f, 0.1 + 0.2im, 100)
 f(r) # close to zero
 ## END
 
-# **Problem 4(b)** By changing the initial guesses compute 5 roots to
+# **Problem 5(b)** By changing the initial guesses compute 5 roots to
 # $sin(x) - 1/x$. Hint: you may need to add an overload for `/(x::Real, y::Dual)`.
 
 ## TODO: Use `newton` to compute roots of `sin(x) - 1/x`.
@@ -472,7 +517,7 @@ newton(x -> sin(x) - 1/x, 6, 100)
 ## END
 
 
-# **Problem 5** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
+# **Problem 6** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
 # Extend our newton method for vector-valued functions:
 
 function newton(f, x::AbstractVector, N) # x = x_0 is the inital guess, now a vector

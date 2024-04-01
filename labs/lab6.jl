@@ -16,11 +16,6 @@
 # in clinical trial accelleration for vaccine development by Moderna,
 # climate change modelling and COVID prediction, see the [SciML Schowcase](https://sciml.ai/showcase/).
 
-# **Learning Outcomes**
-# 1. Combining neural networks and differential equations.
-# 2. Deducing dynamics by training a neural network.
-# 3. Using multiple optimisers to get good approximations.
-
 using Lux, DifferentialEquations, Optimization, OptimizationOptimisers, Plots, Zygote, SciMLSensitivity, ComponentArrays, Random, LinearAlgebra, Test
 
 
@@ -128,54 +123,7 @@ prob = OptimizationProblem(OptimizationFunction(firstorder_loss, AutoZygote()), 
 # function. Can you get better results than the simple RELU network?
 ## TODO: Construct a multilayer NN with smooth activation and see if it performs better
 
-## SOLUTION 
 
-smoothstep = x -> x*(tanh(10x) + 1)/2
-
-## Multilayer model
-const SMOOTHSTEP_MODEL = Chain(Dense(1, 5, smoothstep), Dense(5, 5, smoothstep), Dense(5, 5, smoothstep),
-              Dense(5, 1))
-## Get the initial parameters and state variables of the model
-ps, st = Lux.setup(rng, SMOOTHSTEP_MODEL); ps = ComponentArray(ps)
-const SMOOTHSTEP_ST = st
-
-function firstorder_rhs_smoothstep!(du, u, p, t)
-    du[1] = u[1]  + SMOOTHSTEP_MODEL(u, p, SMOOTHSTEP_ST)[1][1]
-end
-
-function firstorder_loss_smoothstep(p, (data, t))
-    loss = 0.0
-    for j = 1:size(data,2)
-        prob = ODEProblem(firstorder_rhs_smoothstep!, data[1:1,j], (0.0, t[end]), p)
-        pred = Vector(solve(prob, Vern7(), abstol = 1e-6, reltol = 1e-6, saveat=t))
-        loss += norm(data[:,j] - pred)
-    end
-    loss
-end
-
-
-
-smoothstep_callback = function (p, l)
-    g = range(-1,1;length=30)
-    pred =  SMOOTHSTEP_MODEL(g', p.u, SMOOTHSTEP_ST)[1]'
-    plt = plot(g, -2.3*g.^3; label="true")
-    plot!(plt, g, pred; label = "prediction", title="loss: $l")
-    display(plt)
-    return false
-end
-
-prob = OptimizationProblem(OptimizationFunction(firstorder_loss_smoothstep, AutoZygote()), ps, (data, t))
-@time ret = solve(prob, Adam(0.03), maxiters=300, callback=smoothstep_callback)
-
-prob = OptimizationProblem(OptimizationFunction(firstorder_loss_smoothstep, AutoZygote()), ret.u, (data, t))
-@time ret = solve(prob, LBFGS(), maxiters=200, callback=smoothstep_callback)
-
-prob = OptimizationProblem(OptimizationFunction(firstorder_loss_smoothstep, AutoZygote()), ret.u, (data, t))
-@time ret = solve(prob, LBFGS(), maxiters=200, callback=smoothstep_callback)
-
-## I can't get better results!  😅
-
-## END
 
 # **Problem 2** Use the predator-prey model
 # $$
@@ -194,65 +142,5 @@ prob = OptimizationProblem(OptimizationFunction(firstorder_loss_smoothstep, Auto
 
 ## TODO: Learn the dynamics in a predator-prey model.
 
-## SOLUTION
-## This is modified from the above link.
 
-function lotka!(du, u, p, t)
-    x,y = u
-    α, β, γ, δ = p
-    du[1] = α * x - β * y * x
-    du[2] = γ * x * y - δ * y
-end
-
-## Define the experimental parameter
-u₀ = [1,2]
-p_ = [1,2,3,4]
-prob = ODEProblem(lotka!, u0, (0.0, 5.0), p_)
-t = range(0, 5; length=21)
-solution = solve(prob, Vern7(), abstol = 1e-12, reltol = 1e-12, saveat = t)
-plot(solution)
-#
-X = Array(solution)
-
-rbf(x) = exp.(-(x .^ 2))
-
-## Multilayer FeedForward
-const RBF_MODEL = Chain(Dense(2, 5, rbf), Dense(5, 5, rbf), Dense(5, 5, rbf), Dense(5, 2))
-## Get the initial parameters and state variables of the model
-ps, st = Lux.setup(rng, RBF_MODEL); ps = ComponentArray(ps)
-const RBF_ST = st
-
-## Define the hybrid model
-function ude_dynamics_rhs!(du, u, p, t)
-    û = RBF_MODEL(u, p, RBF_ST)[1] # Network prediction
-    du[1] = u[1] + û[1]
-    du[2] = -2u[2] + û[2]
-end
-
-## Define the problem
-
-function ude_solve(p)
-    prob = ODEProblem(ude_dynamics_rhs!, [1.,2.], (0.0, 5.0), p)
-    solve(prob, Vern7(), abstol = 1e-6, reltol = 1e-6, saveat=t)
-end
-
-function ude_loss(p, (data, t))    
-    pred = Array(ude_solve(p))
-    norm(data - pred)
-end
-
-
-ude_callback = function (p, l)
-    display(plot(ude_solve(p.u); title="loss = $l"))
-    return false
-end
-
-prob = OptimizationProblem(OptimizationFunction(ude_loss, AutoZygote()), ps, (X, t))
-@time ret = solve(prob, Adam(0.03), maxiters=5000, callback=ude_callback)
-
-prob = OptimizationProblem(OptimizationFunction(ude_loss, AutoZygote()), ret.u, (X, t))
-@time ret = solve(prob, LBFGS(), maxiters=2000, callback=ude_callback)
-
-
-## END
 

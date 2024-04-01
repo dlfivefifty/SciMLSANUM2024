@@ -10,7 +10,7 @@
 
 # It is ideal for a course on Scientific Machine Learning (SciML)  because it both allows fast 
 # implementation of algorithms but also has support for fast automatic-differentiation, 
-# a feature that is of increasing importance in machine learning. 
+# a feature that is of importance in machine learning. 
 # Also, the libraries for solving differential equations and SciML are quite advanced.
 # As a bonus, it is easy-to-read and fun to write.
 
@@ -27,7 +27,7 @@
 # 5. Construction of a dense `Vector` or `Matrix` either directly or via comprehensions or broadcasting.
 
 # In what follows we need to use the testing package, which provides a macro called `@test`
-# that error whenever a test returns false. We load thisas follows:
+# that error whenever a test returns false. We load this as follows:
 
 using Test
 
