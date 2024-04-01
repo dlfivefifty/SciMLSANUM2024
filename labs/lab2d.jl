@@ -20,8 +20,6 @@
 # 3. Extending dual numbers to gradients of 2D functions.
 # 3. Computing higher-dimensional gradients using ForwardDiff.jl.
 
-using Test
-
 
 # ## 2.1 Dual numbers
 
@@ -29,29 +27,14 @@ using Test
 # in a way similar to `Complex` or `Rat`. For simplicity we don't restrict the types of `a` and `b`
 # but for us they will usually be `Float64`. We create this type very similar to `Rat` above:
 
-## DEMO
-struct Dual
-    a
-    b
-end
-## END
+##
 
 # We can easily support addition of dual numbers as in `Rat` using the formula
 # $$
 # (a+bϵ) + (c+dϵ) = (a+c) + (b+d)ϵ
 # $$
 
-## DEMO
-import Base: + # we want to overload +
-
-function +(x::Dual, y::Dual)
-    a,b = x.a, x.b # x == a+bϵ. This gets out a and b
-    c,d = y.a, y.b # y == c+dϵ. This gets out c and d
-    Dual(a+c, b+d)
-end
-
-Dual(1,2) + Dual(3,4) # just adds each argument
-## END
+##
 
 # For multiplication we used the fact that $ϵ^2 = 0$ to derive the formula
 # $$
@@ -60,15 +43,7 @@ Dual(1,2) + Dual(3,4) # just adds each argument
 # Here we support this operation by overloading `*` when the inputs are both
 # `Dual`:
 
-## DEMO
-import Base: * # we want to also overload *
-
-function *(x::Dual, y::Dual)
-    a,b = x.a, x.b # x == a+bϵ. This gets out a and b
-    c,d = y.a, y.b # y == c+dϵ. This gets out c and d
-    Dual(a*c, b*c + a*d)
-end
-## END
+##
 
 
 # ### Differentiating polynomials
@@ -86,10 +61,7 @@ end
 # We can use this fact to differentiate simple polynomials that only use `+`
 # and `*`:
 
-## DEMO
-f = x -> x*x*x + x
-f(Dual(2,1)) # (2^3 + 2) + (3*2^2+1)*ϵ
-## END
+##
 
 # A polynomial like `x^3 + 1` is not yet supported.
 # To support this we need to add addition of `Dual` with `Int` or `Float64`.
@@ -97,33 +69,7 @@ f(Dual(2,1)) # (2^3 + 2) + (3*2^2+1)*ϵ
 # will support both at the same time.
 # We can overload the appropriate functions as follows:
 
-## DEMO
-import Base: ^
-
-Dual(a::Real) = Dual(a, 0) # converts a real number to a dual number with no ϵ
-
-+(x::Real, y::Dual) = Dual(x) + y
-+(x::Dual, y::Real) = x + Dual(y)
-
-## a simple recursive function to support x^2, x^3, etc.
-function ^(x::Dual, n::Int)
-    if n < 0
-        error("Not implemented") # don't support negative n, yet
-    end
-    if n == 1
-        x # Just return the input
-    else
-        ret = x
-        for k = 1:n-1
-            ret = ret*x
-        end
-        ret # returns the last argument
-    end
-end
-
-f = x -> x^3 + 1
-f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
-## END
+##
 
 # ### Differentiating functions
 
@@ -131,16 +77,7 @@ f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
 # a _dual extension_, that is, are consistent with the formula $f(a+bϵ) = f(a) + bf'(a)ϵ$
 # as follows:
 
-## DEMO
-import Base: exp
-exp(x::Dual) = Dual(exp(x.a), exp(x.a) * x.b)
-
-
-# We can use this to differentiate a function that composes these basic operations:
-
-f = x -> exp(x^2 + exp(x))
-f(Dual(1, 1))
-## END
+##
 
 
 # What makes dual numbers so effective is that, unlike other methods for approximating derivatives like divided differences, they are not
@@ -160,34 +97,23 @@ import Base: -, cos, sin, /
 -(x::Dual) = Dual(-x.a, -x.b)
 
 ## TODO: implement -(::Dual, ::Dual)
-## SOLUTION
--(x::Dual, y::Dual) = Dual(x.a - y.a, x.b - y.b)
-## END
+
 
 
 function cos(x::Dual)
     ## TODO: implement cos for Duals
-    ## SOLUTION
-    Dual(cos(x.a), -sin(x.a) * x.b)
-    ## END
+    
 end
 
 function sin(x::Dual)
     ## TODO: implement sin for Duals
-    ## SOLUTION
-    Dual(sin(x.a), cos(x.a) * x.b)
-    ## END
+    
 end
 
 function /(x::Dual, y::Dual)
     ## TODO: implement division for Duals.
     ## Hint: think of this as x * (1/y)
-    ## SOLUTION
-    if iszero(y.a)
-        error("Division for dual numbers is ill-defined when denonimator real part is zero.")
-    end
-    return Dual(x.a / y.a, (y.a * x.b - x.a * y.b) / y.a^2)
-    ## END
+    
 end
 
 x = 0.1
@@ -205,39 +131,7 @@ x = 0.1
 # at the point $x = 0.1$. Compare with divided differences to give evidence that your implementation is correct.
 
 ## TODO: Use dual numbers to compute the derivatives of the 3 functions above.
-## SOLUTION
 
-## Define the functions
-f = x -> exp(exp(x)cos(x) + sin(x))
-/(x::Dual, k::Int) = Dual(x.a/k, x.b/k) # missing overload from above
--(x::Dual, k::Int) = Dual(x.a-k, x.b) # missing overload from above
-*(k::Int, x::Dual) = Dual(k*x.a, k*x.b) # missing overload from above
-g = function(x)
-    ret = 1
-    for k = 1:1000
-        ret *= x/k - 1
-    end
-    ret
-end
-function cont(n, x)
-    ret = 2
-    for k = 1:n-1
-        ret = 2 + (x-1)/ret
-    end
-    1 + (x-1)/ret
-end
-
-## With the previous problems solved, this is as simple as running
-
-fdual = f(0.1+ϵ)
-fdual.b
-#
-gdual = g(0.1+ϵ)
-gdual.b
-#
-contdual = cont(1000,0.1+ϵ)
-contdual.b
-## END
 
 # **Problem 2** Consider a simple forward Euler method approximating the solution to the Pendulum equation with friction:
 # $$
@@ -259,32 +153,7 @@ contdual.b
 # Hint: check your result by comparing to a divided difference.
 
 ## TODO: Differentiate through an ODE solve using dual nubmers
-## SOLUTION
-𝐟 = function(h, 𝐱)
-    (τ,u,v) = 𝐱
-    [τ,u + h*v, v + h*(-τ*v - sin(u))]
-end
 
-function forwardeuler(τ, 𝐮₀, 𝐟, h, n)
-    𝐱 = [τ; 𝐮₀]
-    for k = 1:n
-        𝐱 = 𝐟(h, 𝐱)
-    end
-    𝐱[2]
-end
-
-
-## we need a few more overloads:
-*(x::Dual, y::Number) = x * Dual(y)
-*(x::Number, y::Dual) = Dual(x) * y
--(x::Dual, y::Number) = x - Dual(y)
-
-
-der = forwardeuler(Dual(1.0,1.0),[0.1,0.2], 𝐟, 0.1, 100).b
-h = sqrt(eps())
-divd = (forwardeuler(1+h,[0.1,0.2], 𝐟, 0.1, 100)-forwardeuler(1,[0.1,0.2], 𝐟, 0.1, 100))/h
-@test der ≈ divd atol=1E-8
-## END
 
 # -------
 
@@ -336,26 +205,18 @@ end
 
 function +(s::Dual2D, t::Dual2D)
     ## TODO: Implement +, returning a Dual2D
-    ## SOLUTION
-    Dual2D(s.a + t.a, s.b + t.b, s.c + t.c)
-    ## END
+    
 end
 
 function *(c::Number, s::Dual2D)
     ## TODO: Implement c * Dual2D(...), returning a Dual2D
-    ## SOLUTION
-    Dual2D(c * s.a, c * s.b, c * s.c)
-    ## END
+    
 end
 
 function *(s::Dual2D, t::Dual2D)
     ## TODO: Implement Dual2D(...) * Dual2D(...), returning a Dual2D
     
-    ## SOLUTION
-    ## we deduce (s.a + s.b ϵ_x + s.c ϵ_y)*(t.a + t.b ϵ_x + t.c ϵ_y) == 
-    ## s.a * t.a + (s.a*t.b + s.b*t.a)*ϵ_x + (s.a*t.c + s.c*t.a)*ϵ_y
-    Dual2D(s.a * t.a, s.a * t.b + s.b * t.a, s.a * t.c + s.c * t.a)
-    ## END
+    
 end
 
 f = function (x, y) # (x+2y^2)^3 using only * and +
@@ -376,11 +237,7 @@ x,y = 1., 2.
 # ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation,
 # including supporting gradients and Jacobians. Its usage in 1D works as follows:
 
-## DEMO
-using ForwardDiff, Test
-
-@test ForwardDiff.derivative(cos, 0.1) ≈ -sin(0.1) # uses dual number
-## END
+##
 
 # It also works with higher dimensions,  allowing for arbitrary dimensional computation
 # of gradients. Consider a simple function $f : ℝ^n → ℝ$ defined by
@@ -389,29 +246,15 @@ using ForwardDiff, Test
 # $$
 # which we can implement as follows:
 
-## DEMO
-f = function(x)
-    ret = zero(eltype(x)) # Need to use zero(eltype(x)) to support dual numbers
-    for k = 1:length(x)-1
-        ret += x[k]*x[k+1]
-    end
-    ret
-end
-## END
+##
 
 # We can use ForwardDiff.jl to compute its gradient:
 
-## DEMO
-x = randn(5)
-ForwardDiff.gradient(f,x)
-## END
+##
 
 # The one catch is the complexity is quadratic:
 
-## DEMO
-@time ForwardDiff.gradient(f,randn(1000));
-@time ForwardDiff.gradient(f,randn(10_000)); # around 100x slower
-## END
+##
 
 # The reason for this is if we have $n$ unknowns the higher-dimensional dual number uses $n$ different $ϵ$s
 # for each argument, meaning the input has $n^2$ degrees-of-freedom. 
@@ -432,16 +275,7 @@ ForwardDiff.gradient(f,x)
 # The function `ForwardDiff.jacobian(f, 𝐱)` computes $J_f(𝐱)$.
 # Here is an example of computing the Jacobian of a simple function $f : ℝ^2 → ℝ^2$:
 
-## DEMO
-f = function(𝐱)
-    (x,y) = 𝐱 # get out the components of the vector
-    [exp(x*cos(y)), sin(exp(x*y))]
-end
-
-x,y = 0.1,0.2
-@test ForwardDiff.jacobian(f, [x,y]) ≈ [exp(x*cos(y))*cos(y)        -exp(x*cos(y))*x*sin(y);
-                                        cos(exp(x*y))*exp(x*y)*y     cos(exp(x*y))*exp(x*y)*x]
-## END
+##
 
 
 # -----
@@ -456,15 +290,7 @@ function todahamiltonian(𝐱𝐲)
     x,y = 𝐱𝐲[1:n], 𝐱𝐲[n+1:end] # split the input vector into its two components.
     ret = zero(eltype(𝐱𝐲))
     ## TODO: implement the Hamiltonian, eg using for-loops
-    ## SOLUTION
-    for k = 1:n
-        ret += y[k]^2/2
-    end
-    for k = 1:n-1
-        ret += exp(x[k] - x[k+1])
-    end
-    ret
-    ## END
+    
 end
 
 x = [1.,2,3]
@@ -488,25 +314,10 @@ ForwardDiff.hessian(todahamiltonian, [x; y])
 # of Newton's method working:
 
 
-## DEMO
-## derivative(f, x) computes the derivative at a point x using our version of Dual
-derivative(f, x) = f(Dual(x,1)).b
-
-function newton(f, x, N) # x = x_0 is the initial guess
-    for k = 1:N
-        x = x - f(x)/derivative(f,x)
-    end
-    x
-end
-
-f = x -> x^5 + x^2 + 1
-r = newton(f, 0.1, 100)
-## END
+##
 
 # We can test that we have indeed found a root:
-## DEMO
-f(r)
-## END
+##
 
 
 # -----
@@ -519,30 +330,13 @@ f(r)
 
 
 ## TODO: By making the initial guess complex find a complex root.
-## SOLUTION
-r = newton(f, 0.1 + 0.2im, 100)
-f(r) # close to zero
-## END
+
 
 # **Problem 5(b)** By changing the initial guesses compute 5 roots to
 # $sin(x) - 1/x$. Hint: you may need to add an overload for `/(x::Real, y::Dual)`.
 
 ## TODO: Use `newton` to compute roots of `sin(x) - 1/x`.
-## SOLUTION
 
-## We need to add a missing overload for `Dual`:
-
-/(x::Real, y::Dual) = Dual(x)/y
-
-
-## Changing the initial guess we get 5 distinct roots
-newton(x -> sin(x) - 1/x, 1, 100),
-newton(x -> sin(x) - 1/x, 2, 100),
-newton(x -> sin(x) - 1/x, 3, 100),
-newton(x -> sin(x) - 1/x, 5, 100),
-newton(x -> sin(x) - 1/x, 6, 100)
-
-## END
 
 
 # **Problem 6** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
@@ -550,12 +344,7 @@ newton(x -> sin(x) - 1/x, 6, 100)
 
 function newton(f, x::AbstractVector, N) # x = x_0 is the inital guess, now a vector
     ## TODO: reimplement newton for vector inputs using ForwardDiff.jacobian
-    ## SOLUTION
-    for k = 1:N
-        x = x - ForwardDiff.jacobian(f,x) \ f(x)
-    end
-    x
-    ## END
+    
 end
 
 f = function(𝐱)

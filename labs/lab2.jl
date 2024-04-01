@@ -4,7 +4,7 @@
 # In this lab we explore a simple approach to computing derivatives:
 # _dual numbers_. This is a special mathematical object akin to complex numbers
 # that allows us to compute derivatives to very high accuracy in an automated fashion,
-# and is an example of forward mode [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+# and is an example of forward-mode [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation).
 # To realise dual numbers on a computer we need to introduce the notation of a "type"
 # and create a customised type to represent dual numbers, which is what we discuss first.
 # For functions of multiple variables we can extend the concept of dual numbers to computing gradients
@@ -27,15 +27,18 @@
 # in a way similar to `Complex` or `Rat`. For simplicity we don't restrict the types of `a` and `b`
 # but for us they will usually be `Float64`. We create this type very similar to `Rat` above:
 
+
 struct Dual
     a
     b
 end
 
+
 # We can easily support addition of dual numbers as in `Rat` using the formula
 # $$
 # (a+bϵ) + (c+dϵ) = (a+c) + (b+d)ϵ
 # $$
+
 
 import Base: + # we want to overload +
 
@@ -47,12 +50,14 @@ end
 
 Dual(1,2) + Dual(3,4) # just adds each argument
 
+
 # For multiplication we used the fact that $ϵ^2 = 0$ to derive the formula
 # $$
 # (a+bϵ)*(c+dϵ) = ac +(bc+ad)ϵ.
 # $$
 # Here we support this operation by overloading `*` when the inputs are both
 # `Dual`:
+
 
 import Base: * # we want to also overload *
 
@@ -61,6 +66,7 @@ function *(x::Dual, y::Dual)
     c,d = y.a, y.b # y == c+dϵ. This gets out c and d
     Dual(a*c, b*c + a*d)
 end
+
 
 
 # ### Differentiating polynomials
@@ -78,14 +84,17 @@ end
 # We can use this fact to differentiate simple polynomials that only use `+`
 # and `*`:
 
+
 f = x -> x*x*x + x
 f(Dual(2,1)) # (2^3 + 2) + (3*2^2+1)*ϵ
+
 
 # A polynomial like `x^3 + 1` is not yet supported.
 # To support this we need to add addition of `Dual` with `Int` or `Float64`.
 # Note that both of these are "subtypes" of `Real` and so restricting on `Real`
 # will support both at the same time.
 # We can overload the appropriate functions as follows:
+
 
 import Base: ^
 
@@ -113,11 +122,13 @@ end
 f = x -> x^3 + 1
 f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
 
+
 # ### Differentiating functions
 
 # We can also overload functions like `exp` so that they satisfy the rules of
 # a _dual extension_, that is, are consistent with the formula $f(a+bϵ) = f(a) + bf'(a)ϵ$
 # as follows:
+
 
 import Base: exp
 exp(x::Dual) = Dual(exp(x.a), exp(x.a) * x.b)
@@ -127,6 +138,7 @@ exp(x::Dual) = Dual(exp(x.a), exp(x.a) * x.b)
 
 f = x -> exp(x^2 + exp(x))
 f(Dual(1, 1))
+
 
 
 # What makes dual numbers so effective is that, unlike other methods for approximating derivatives like divided differences, they are not
@@ -182,6 +194,26 @@ x = 0.1
 ## TODO: Use dual numbers to compute the derivatives of the 3 functions above.
 
 
+# **Problem 2** Consider a simple forward Euler method approximating the solution to the Pendulum equation with friction:
+# $$
+# u'' = τ u' - \sin u
+# $$
+# which we can rewrite as a first order system:
+# $$
+# \begin{bmatrix}
+#    u' \\
+#    v'
+#    \end{bmatrix} = \begin{bmatrix} v \\ -τ*v - \sin u \end{bmatrix}
+# $$
+# That is, we want to implement the iteration
+# $$
+# 𝐮_{k+1} = 𝐮_k + h*\begin{bmatrix} 𝐮_k[2] \\ -τ 𝐮_k[2] - \sin 𝐮_k[1] \end{bmatrix}
+# $$
+# with a specified initial condition $𝐮_0$. For $N = 100$, $h = 0.1$ and $𝐮_0 = [0.1,0.2]$, differentiate
+# the solution with-respect to $τ$ at $τ = 1$ using dual numbers.
+# Hint: check your result by comparing to a divided difference.
+
+## TODO: Differentiate through an ODE solve using dual nubmers
 
 
 # -------
@@ -220,7 +252,7 @@ x = 0.1
 
 # -------
 
-# **Problem 2** 
+# **Problem 3** 
 # Complete the following implementation of `Dual2D` supporting `+` and `*` (and
 # assuming `a,b,c` are `Float64`).
 
@@ -266,9 +298,11 @@ x,y = 1., 2.
 # ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation,
 # including supporting gradients and Jacobians. Its usage in 1D works as follows:
 
+
 using ForwardDiff, Test
 
 @test ForwardDiff.derivative(cos, 0.1) ≈ -sin(0.1) # uses dual number
+
 
 # It also works with higher dimensions,  allowing for arbitrary dimensional computation
 # of gradients. Consider a simple function $f : ℝ^n → ℝ$ defined by
@@ -276,6 +310,7 @@ using ForwardDiff, Test
 # f([x_1,…,x_n]) = ∑_{k=1}^{n-1} x_k x_{k+1}
 # $$
 # which we can implement as follows:
+
 
 f = function(x)
     ret = zero(eltype(x)) # Need to use zero(eltype(x)) to support dual numbers
@@ -285,15 +320,20 @@ f = function(x)
     ret
 end
 
+
 # We can use ForwardDiff.jl to compute its gradient:
+
 
 x = randn(5)
 ForwardDiff.gradient(f,x)
 
+
 # The one catch is the complexity is quadratic:
+
 
 @time ForwardDiff.gradient(f,randn(1000));
 @time ForwardDiff.gradient(f,randn(10_000)); # around 100x slower
+
 
 # The reason for this is if we have $n$ unknowns the higher-dimensional dual number uses $n$ different $ϵ$s
 # for each argument, meaning the input has $n^2$ degrees-of-freedom. 
@@ -314,6 +354,7 @@ ForwardDiff.gradient(f,x)
 # The function `ForwardDiff.jacobian(f, 𝐱)` computes $J_f(𝐱)$.
 # Here is an example of computing the Jacobian of a simple function $f : ℝ^2 → ℝ^2$:
 
+
 f = function(𝐱)
     (x,y) = 𝐱 # get out the components of the vector
     [exp(x*cos(y)), sin(exp(x*y))]
@@ -324,9 +365,10 @@ x,y = 0.1,0.2
                                         cos(exp(x*y))*exp(x*y)*y     cos(exp(x*y))*exp(x*y)*x]
 
 
+
 # -----
 
-# **Problem 3** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Hamiltonian
+# **Problem 4** We can also use ForwardDiff.jl to compute hessians via `ForwardDiff.hessian`. Compute the Hessian of the following Toda Hamiltonian
 # $$
 #   f([x_1, …, x_n, y_1, …, y_n]) =  {1 \over 2} ∑_{k=1}^n y_k^2 + ∑_{k=1}^{n-1} \exp(x_k - x_{k+1})
 # $$
@@ -360,6 +402,7 @@ ForwardDiff.hessian(todahamiltonian, [x; y])
 # of Newton's method working:
 
 
+
 ## derivative(f, x) computes the derivative at a point x using our version of Dual
 derivative(f, x) = f(Dual(x,1)).b
 
@@ -373,14 +416,17 @@ end
 f = x -> x^5 + x^2 + 1
 r = newton(f, 0.1, 100)
 
+
 # We can test that we have indeed found a root:
+
 f(r)
+
 
 
 # -----
 
 
-# **Problem 4(a)** Use `newton` with a complex number to compute
+# **Problem 5(a)** Use `newton` with a complex number to compute
 # an approximation to a complex root of $f(x) = x^5 - x^2 + 1$.
 # Verify the approximation is accurate by testing that it satisfies $f(r)$
 # is approximately zero.
@@ -389,14 +435,14 @@ f(r)
 ## TODO: By making the initial guess complex find a complex root.
 
 
-# **Problem 4(b)** By changing the initial guesses compute 5 roots to
+# **Problem 5(b)** By changing the initial guesses compute 5 roots to
 # $sin(x) - 1/x$. Hint: you may need to add an overload for `/(x::Real, y::Dual)`.
 
 ## TODO: Use `newton` to compute roots of `sin(x) - 1/x`.
 
 
 
-# **Problem 5** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
+# **Problem 6** Newton's method works also for finding roots of functions $f : ℝ^n → ℝ^n$ using the Jacobian. 
 # Extend our newton method for vector-valued functions:
 
 function newton(f, x::AbstractVector, N) # x = x_0 is the inital guess, now a vector
@@ -410,3 +456,6 @@ f = function(𝐱)
 end
 
 @test maximum(abs,f(newton(f, [0.1,0.2], 200))) ≤ 1E-13
+
+
+

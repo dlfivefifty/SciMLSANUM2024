@@ -29,19 +29,19 @@ using Test
 # in a way similar to `Complex` or `Rat`. For simplicity we don't restrict the types of `a` and `b`
 # but for us they will usually be `Float64`. We create this type very similar to `Rat` above:
 
-## DEMO
+
 struct Dual
     a
     b
 end
-## END
+
 
 # We can easily support addition of dual numbers as in `Rat` using the formula
 # $$
 # (a+bϵ) + (c+dϵ) = (a+c) + (b+d)ϵ
 # $$
 
-## DEMO
+
 import Base: + # we want to overload +
 
 function +(x::Dual, y::Dual)
@@ -51,7 +51,7 @@ function +(x::Dual, y::Dual)
 end
 
 Dual(1,2) + Dual(3,4) # just adds each argument
-## END
+
 
 # For multiplication we used the fact that $ϵ^2 = 0$ to derive the formula
 # $$
@@ -60,7 +60,7 @@ Dual(1,2) + Dual(3,4) # just adds each argument
 # Here we support this operation by overloading `*` when the inputs are both
 # `Dual`:
 
-## DEMO
+
 import Base: * # we want to also overload *
 
 function *(x::Dual, y::Dual)
@@ -68,7 +68,7 @@ function *(x::Dual, y::Dual)
     c,d = y.a, y.b # y == c+dϵ. This gets out c and d
     Dual(a*c, b*c + a*d)
 end
-## END
+
 
 
 # ### Differentiating polynomials
@@ -86,10 +86,10 @@ end
 # We can use this fact to differentiate simple polynomials that only use `+`
 # and `*`:
 
-## DEMO
+
 f = x -> x*x*x + x
 f(Dual(2,1)) # (2^3 + 2) + (3*2^2+1)*ϵ
-## END
+
 
 # A polynomial like `x^3 + 1` is not yet supported.
 # To support this we need to add addition of `Dual` with `Int` or `Float64`.
@@ -97,7 +97,7 @@ f(Dual(2,1)) # (2^3 + 2) + (3*2^2+1)*ϵ
 # will support both at the same time.
 # We can overload the appropriate functions as follows:
 
-## DEMO
+
 import Base: ^
 
 Dual(a::Real) = Dual(a, 0) # converts a real number to a dual number with no ϵ
@@ -123,7 +123,7 @@ end
 
 f = x -> x^3 + 1
 f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
-## END
+
 
 # ### Differentiating functions
 
@@ -131,7 +131,7 @@ f(Dual(2,1))  # 2^3+1 + 3*2^2*ϵ
 # a _dual extension_, that is, are consistent with the formula $f(a+bϵ) = f(a) + bf'(a)ϵ$
 # as follows:
 
-## DEMO
+
 import Base: exp
 exp(x::Dual) = Dual(exp(x.a), exp(x.a) * x.b)
 
@@ -140,7 +140,7 @@ exp(x::Dual) = Dual(exp(x.a), exp(x.a) * x.b)
 
 f = x -> exp(x^2 + exp(x))
 f(Dual(1, 1))
-## END
+
 
 
 # What makes dual numbers so effective is that, unlike other methods for approximating derivatives like divided differences, they are not
@@ -376,11 +376,11 @@ x,y = 1., 2.
 # ForwardDiff.jl is a package that uses dual numbers under the hood for automatic differentiation,
 # including supporting gradients and Jacobians. Its usage in 1D works as follows:
 
-## DEMO
+
 using ForwardDiff, Test
 
 @test ForwardDiff.derivative(cos, 0.1) ≈ -sin(0.1) # uses dual number
-## END
+
 
 # It also works with higher dimensions,  allowing for arbitrary dimensional computation
 # of gradients. Consider a simple function $f : ℝ^n → ℝ$ defined by
@@ -389,7 +389,7 @@ using ForwardDiff, Test
 # $$
 # which we can implement as follows:
 
-## DEMO
+
 f = function(x)
     ret = zero(eltype(x)) # Need to use zero(eltype(x)) to support dual numbers
     for k = 1:length(x)-1
@@ -397,21 +397,21 @@ f = function(x)
     end
     ret
 end
-## END
+
 
 # We can use ForwardDiff.jl to compute its gradient:
 
-## DEMO
+
 x = randn(5)
 ForwardDiff.gradient(f,x)
-## END
+
 
 # The one catch is the complexity is quadratic:
 
-## DEMO
+
 @time ForwardDiff.gradient(f,randn(1000));
 @time ForwardDiff.gradient(f,randn(10_000)); # around 100x slower
-## END
+
 
 # The reason for this is if we have $n$ unknowns the higher-dimensional dual number uses $n$ different $ϵ$s
 # for each argument, meaning the input has $n^2$ degrees-of-freedom. 
@@ -432,7 +432,7 @@ ForwardDiff.gradient(f,x)
 # The function `ForwardDiff.jacobian(f, 𝐱)` computes $J_f(𝐱)$.
 # Here is an example of computing the Jacobian of a simple function $f : ℝ^2 → ℝ^2$:
 
-## DEMO
+
 f = function(𝐱)
     (x,y) = 𝐱 # get out the components of the vector
     [exp(x*cos(y)), sin(exp(x*y))]
@@ -441,7 +441,7 @@ end
 x,y = 0.1,0.2
 @test ForwardDiff.jacobian(f, [x,y]) ≈ [exp(x*cos(y))*cos(y)        -exp(x*cos(y))*x*sin(y);
                                         cos(exp(x*y))*exp(x*y)*y     cos(exp(x*y))*exp(x*y)*x]
-## END
+
 
 
 # -----
@@ -488,7 +488,7 @@ ForwardDiff.hessian(todahamiltonian, [x; y])
 # of Newton's method working:
 
 
-## DEMO
+
 ## derivative(f, x) computes the derivative at a point x using our version of Dual
 derivative(f, x) = f(Dual(x,1)).b
 
@@ -501,12 +501,12 @@ end
 
 f = x -> x^5 + x^2 + 1
 r = newton(f, 0.1, 100)
-## END
+
 
 # We can test that we have indeed found a root:
-## DEMO
+
 f(r)
-## END
+
 
 
 # -----

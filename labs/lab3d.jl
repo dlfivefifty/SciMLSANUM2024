@@ -26,11 +26,7 @@
 # overloads the `'` syntax to mean differentiation:
 
 
-
-using Zygote, LinearAlgebra, Test
-
-@test cos'(0.1) ≈ -sin(0.1) # Differentiates cos using reverse-mode autodiff
-
+##
 
 # The real power of Zygote.jl is computing gradients (or more generally, Jacobians
 # of $f : ℝ^m → ℝ^n$ where $n ≪ m$). We can compute a gradient of the function we considered before as follows:
@@ -43,30 +39,19 @@ f = function(x)
     ret
 end
 
-
-x = randn(5)
-Zygote.gradient(f,x)
-
+##
 
 
 # Unlike ForwardDiff.jl, the gradient returns a tuple since multiple arguments are supported in addition
 # to vector inputs, eg:
 
 
-
-x,y = 0.1, 0.2
-@test all(Zygote.gradient((x,y) -> cos(x*exp(y)), x, y) .≈ [-sin(x*exp(y))*exp(y), -sin(x*exp(y))*x*exp(y)])
-
+##
 
 
 # Now differentiating this function is not particularly faster than ForwardDiff.jl:
 
-
-x = randn(1000)
-@time Zygote.gradient(f, x);
-x = randn(10_000)
-@time Zygote.gradient(f, x); # roughly 200x slower
-
+##
 
 # It also uses more memory the larger the computation. Take for example 
 # the Taylor series for the exponential from Lab 1:
@@ -84,28 +69,12 @@ end
 # The more terms we take the more memory is used, despite the function itself
 # using no memory:
 
-
-Zygote.gradient(exp_t, 1.0, 10) # compile
-@time Zygote.gradient(exp_t, 1.0, 10) # uses 10KiB of memory
-@time Zygote.gradient(exp_t, 1.0, 1000) # uses 763KiB of memory
-@time Zygote.gradient(exp_t, 1.0, 100_000) # uses 72MiB of memory
-
+##
 
 
 # Another catch is Zygote.jl doesn't support functions that mutate arrays. Here's an example:
 
-
-f! = function(x)
-    n = length(x)
-    ret = zeros(eltype(x), n)
-    for k = 1:n-1
-        ret[k] = x[k]*x[k+1] # modifies the vector ret
-    end
-    sum(ret)
-end
-x = randn(5)
-Zygote.gradient(f!,x) # errors out
-
+##
 
 # This is unlike `ForwardDiff.gradient` which works fine for differentiating `f!`.
 
@@ -116,12 +85,7 @@ Zygote.gradient(f!,x) # errors out
 # For example, if we rewrite `f` in a vectorised form we see a huge improvement over
 # ForwardDiff.jl:
 
-
-f_vec = x -> sum(x[1:end-1] .* x[2:end]) # a vectorised version of the previus function
-x = randn(20_000)
-Zygote.gradient(f_vec, x) # compile
-@time Zygote.gradient(f_vec, x); #  1500x faster 🤩
-
+##
 
 
 # **Conclusion**: Zygote.jl is much more brittle, sometimes fails outright, requires
@@ -147,23 +111,16 @@ Zygote.gradient(f_vec, x) # compile
 # $$
 # We can compute pullbacks using the `pullback` routine:
 
-
-s, p_sin = pullback(sin, 0.1)
-
+##
 
 # `p_sin` contains the map $t ↦ \cos(0.1) t$. Since pullbacks support multiple arguments
 # it actually returns a tuple with a single entry:
 
-
-p_sin(1)
-
+##
 
 # Thus to get out the value we use the following:
 
-
-@test p_sin(1)[1] == cos(0.1)
-@test p_sin(2)[1] == 2cos(0.1)
-
+##
 
 # The reason its a map instead of just a scalar becomes important for the vector-valued case
 # where Jacobians can often be applied to vectors much faster than constructing the Jacobian matrix and
@@ -196,16 +153,7 @@ p_sin(1)
 
 # Let's see pullbacks in action for computing the derivative of $\cos\sqrt{{\rm e}^x}$:
 
-
-x = 0.1 # point we want to differentiate
-y,p₁ = pullback(exp, x) 
-z,p₂ = pullback(sqrt, y) # y is exp(x)
-w,p₃ = pullback(cos, z) # z is sqrt(exp(x))
-
-@test w == cos(sqrt(exp(x)))
-
-@test p₁(p₂(p₃(1)...)...)[1] ≈ p₃(p₂(p₁(1)...)...)[1] ≈ -sin(sqrt(exp(x)))*exp(x)/(2sqrt(exp(x)))
-
+##
 
 # We can see how this can lead to an approach for automatic differentiation.
 # For example, consider the following function composing `sin` over and over:
@@ -222,41 +170,19 @@ end
 # But the number of such pullbacks grows only linearly so this is acceptable. So thus
 # at a high-level we can think of Zygote as running through and computing all the pullbacks:
 
-
-n = 5
-x = 0.1 # input
-
-pullbacks = Any[] # a vector where we store the pull backs
-r = x
-for k = 1:n
-    r,pₖ = pullback(sin, r) # new pullback
-    push!(pullbacks, pₖ)
-end
-r # value
-
+##
 
 # To deduce the derivative we need can either do forward- or back-propogation by looping through our pullbacks
 # either in forward- or in reverse-order. Here we implement back-propagation:
 
-
-reverse_der = 1 # we always initialise with the trivial scaling
-for k = n:-1:1
-    reverse_der = pullbacks[k](reverse_der)[1]
-end
-@test reverse_der ≈ (x -> manysin(n, x))'(x)
-
+##
 
 # Zygote constructs code that is equivalent to this loop automatically, 
 # constructing a high-performance version of this back-propogation loop at compile time using something called source-to-source
 # differentiation. But there's no getting around the fact that it needs to record the pullbacks so it does use more memory the larger
 # the computation:
 
-
-Zygote.gradient(manysin, 10, 1.0) # compile
-@time Zygote.gradient(manysin, 10, 1.0) # uses 4KiB of memory
-@time Zygote.gradient(manysin, 1000, 1.0) # uses 235KiB of memory
-@time Zygote.gradient(manysin, 100_000, 1.0) # uses 21MiB of memory
-
+##
 
 # ------
 
@@ -264,15 +190,7 @@ Zygote.gradient(manysin, 10, 1.0) # compile
 # in the forward direction.
 
 ## TODO: loop through pullbacks in order to compute the derivative.
-## SOLUTION
-forward_der = 1 # we always initialise with the trivial scaling
-for k = 1:n
-    forward_der = pullbacks[k](forward_der)[1]
-end
 
-@test reverse_der ≈ (x -> manysin(n, x))'(x)
-
-## END
 
 
 # ## 3.3 Pullbacks with multiple arguments
@@ -296,19 +214,7 @@ end
 # $$
 # Here we see a simple example:
 
-
-f = (x,y) -> cos(x*exp(y))
-g = sqrt
-h = sin
-F = x -> f(g(x), h(x))
-
-x = 0.1
-gx, p₁ = pullback(g, x)
-hx, p₂ = pullback(h, x)
-z, p₃ = pullback(f, gx, hx)
-
-@test p₁(p₃(1)[1])[1] + p₂(p₃(1)[2])[1] ≈ F'(0.1)
-
+##
 
 
 # Doing more complicated calculations or indeed algorithms becomes
@@ -344,12 +250,7 @@ z, p₃ = pullback(f, gx, hx)
 # $$
 # Here we see an example:
 
-
-f = (𝐱) -> ((x,y) = 𝐱;  exp(x*cos(y)))
-x,y = (0.1,0.2)
-f_v, f_pb = Zygote.pullback(f, [x,y])
-@test f_pb(1)[1] ≈ [exp(x*cos(y))*cos(y), -exp(x*cos(y))*x*sin(y)]
-
+##
 
 # For a function $f : ℝ^n → ℝ^m$ the the pullback represents the linear map $p_{f,𝐱} : ℝ^m → ℝ^n$ given by
 # $$
@@ -357,25 +258,7 @@ f_v, f_pb = Zygote.pullback(f, [x,y])
 # $$
 # Here is a simple example:
 
-
-f = function(𝐱)
-    x,y,z = 𝐱
-    [exp(x*y*z),cos(x*y+z)]
-end
-
-
-𝐱 = [0.1,0.2,0.3]
-f_x, p_f =  pullback(f, 𝐱) # returns the value and pullback
-
-J_f = function(𝐱)
-    x,y,z = 𝐱
-    [y*z*exp(x*y*z) x*z*exp(x*y*z) x*y*exp(x*y*z);
-    -y*sin(x*y+z) -x*sin(x*y+z) -sin(x*y+z)]
-end
-
-𝐲 = [1,2]
-@test J_f(𝐱)'*𝐲 ≈ p_f(𝐲)[1]
-
+##
 
 
 # Consider a composition $f : ℝ^n → ℝ^m$, $g : ℝ^m → ℝ^ℓ$ and $h : ℝ^ℓ → ℝ$, that is, 
@@ -409,54 +292,20 @@ end
 # $$
 # and summing over the result, eg. computing $[1,1,1]^⊤(\underbrace{𝐟 ∘ ⋯ ∘ 𝐟}_{n\hbox{ times}})(𝐱)$.
 # We implement this with a general function `iteratef`:
-
-𝐟 = function(𝐱)
-    (x,y,z) = 𝐱
-    [cos(x*y)+z, z*y-sin(x), x + y + z]
-end
-
-function iteratef(𝐱, 𝐟, n)
-    for k = 1:n
-        𝐱 = 𝐟(𝐱)
-    end
-    sum(𝐱)
-end
-
-gradient(iteratef, [0.1,0.2,0.3] , 𝐟, 5)[1] # computes the gradient of 5 iterations
-
+##
 
 # To get an idea how this works behind the scenes we can again accumulate the pullbacks:
 
-
-pullbacks = Any[] # a vector where we store the pull backs
-r = [0.1,0.2, 0.3]
-n = 5
-for k = 1:n
-    r,pₖ = pullback(𝐟, r) # new pullback
-    push!(pullbacks, pₖ)
-end
-
-ret,sumpullback = pullback(sum, r)
-ret # value
-
+##
 
 # We can recover the gradient by back-propogation:
 
-
-reverse_grad = 1
-reverse_grad = sumpullback(reverse_grad)[1] # now a 3-vector
-for k = n:-1:1
-    reverse_grad = pullbacks[k](reverse_grad)[1]
-end
-reverse_grad
-
+##
 
 
 # Indeed we match the gradient as computed with Zygote.jl:
 
-
-@test reverse_grad == gradient(iteratef, [0.1,0.2,0.3] , 𝐟, n)[1] 
-
+##
 
 
 # **Problem 2** The function `pushforward` represent the map $𝐭 ↦ J_f(𝐱) 𝐭$. 
@@ -466,26 +315,7 @@ reverse_grad
 # but the result of  `pushforward` only works on vectors. So we need to apply it to each column of the matrix manually.
 
 ## TODO: Compute the gradient as above but using pushforward
-## SOLUTION
 
-r = [0.1,0.2, 0.3]
-X = Matrix(1.0I, 3, 3)
-n = 5
-for k = 1:n
-    pₖ = pushforward(𝐟, r) # new pushforward
-    for j = 1:3
-        X[:,j] = pₖ(X[:,j])
-    end
-    r = 𝐟(r)
-end
-sumpushforward = pushforward(sum, r)
-
-grad = [sumpushforward(X[:,j]) for j = 1:3]
-
-
-@test grad ≈ gradient(iteratef, [0.1,0.2,0.3] , 𝐟, n)[1]
-
-## END
 
 # **Problem 3** Consider a simple forward Euler method approximating the solution to the Pendulum equation with friction:
 # $$
@@ -508,47 +338,7 @@ grad = [sumpushforward(X[:,j]) for j = 1:3]
 # of values to capture the relevant dependencies and verify your result by comparing to `gradient`.
 
 
-## SOLUTION
-𝐟 = function(h, 𝐱)
-    (τ,u,v) = 𝐱
-    [τ,u + h*v, v + h*(-τ*v - sin(u))]
-end
 
-function forwardeuler(τ, 𝐮₀, 𝐟, h, n)
-    𝐱 = [τ; 𝐮₀]
-    for k = 1:n
-        𝐱 = 𝐟(h, 𝐱)
-    end
-    𝐱[2]
-end
-
-
-forwardeuler(1.0,[0.1,0.2], 𝐟, 0.1, 100)
-
-pullbacks = Any[] # a vector where we store the pull backs
-𝐱 = [1.0,0.1, 0.2]
-n = 100
-h = 0.1
-for k = 1:n
-    𝐱,pₖ = pullback(𝐟, h, 𝐱) # new pullback
-    push!(pullbacks, pₖ)
-end
-
-ret,firstpullback = pullback(getindex, 𝐱, 2)
-ret # value
-
-## We can recover the gradient by back-propogation:
-
-reverse_grad = 1
-reverse_grad = firstpullback(reverse_grad)[1] # now a 3-vector
-for k = n:-1:1
-    reverse_grad = pullbacks[k](reverse_grad)[2]
-end
-@test reverse_grad[1] ≈ gradient(forwardeuler, 1.0, [0.1,0.2], 𝐟, 0.1, 100)[1]
-
-
-
-## END
 
 
 
@@ -578,16 +368,7 @@ end
 # compute gradients even
 # with a million degrees of freedom, way beyond what could ever be done with forward-mode automatic differentiation:
 
-
-n = 1_000_000
-f = (x,α) -> (x'x + 2x[1:end-1]'*(x[2:end] ./ (2:length(x)).^α)) - 2sum(x)
-
-
-
-x = randn(n) # initial guess
-Zygote.gradient(f, x, 2) # compile
-@time Zygote.gradient(f, x, 2)
-
+##
 
 # For concreteness we first implement our own version of a quick-and-dirty gradient descent:
 # $$
@@ -596,41 +377,18 @@ Zygote.gradient(f, x, 2) # compile
 # where $γ_k$ is the learning rate. To choose $γ_k$ we just halve
 # the learning rate until we see decrease in the loss function.
 
-
-α = 2
-for k = 1:20
-    γ = 1
-    y = x - γ*Zygote.gradient(f, x, α)[1]
-    while f(x,α) < f(y,α)
-        γ /= 2 # half the learning rate
-        y = x - γ*Zygote.gradient(f, x, α)[1]
-    end
-    x = y
-    @show γ,f(x,α)
-end
-
+##
 
 
 # We can compare this with the "true" solution:
 
-
-A = SymTridiagonal(ones(n), (2:n) .^ (-2))
-@test x ≈ A\ones(n)
-
+##
 
 # In practice its better to use inbuilt optimsation routines and packages. Here we see how we can solve the same problem with
 # the Optimization.jl package, combined with OptimizationOptimisers.jl that has gradient-based optimisation methods,
 # in particular `Adam`.
 
-
-using Optimization, OptimizationOptimisers
-
-x = randn(n) # initial guess
-prob = OptimizationProblem(OptimizationFunction(f, Optimization.AutoZygote()), x, n)
-@time y = solve(prob, Adam(0.03), maxiters=100)
-
-@test y.u ≈ x
-
+##
 
 
 
@@ -645,36 +403,3 @@ prob = OptimizationProblem(OptimizationFunction(f, Optimization.AutoZygote()), x
 
 
 ## TODO: Construct a model for the function and perform regression using Optimization.jl
-## SOLUTION
-
-
-
-n = 100
-x = range(-1, 1; length = n)
-y = exp.(x)
-
-relu(x) = max(0,x)
-
-## Make a function that implements the sum
-function summation_model(x, 𝐚𝐛)
-    n = length(𝐚𝐛) ÷ 2
-    (𝐚, 𝐛) = 𝐚𝐛[1:n], 𝐚𝐛[n+1:end]
-    Y = relu.(𝐚*x' .+ 𝐛)
-    vec(sum(Y; dims=1)) # sums over the columns
-end
-
-
-## Our loss function takes in x and y as parameters
-convex_regression_loss(𝐚𝐛, (x,y)) = norm(summation_model(x, 𝐚𝐛) - y)
-
-
-𝐚,𝐛 = randn(n),randn(n)
-prob = OptimizationProblem(OptimizationFunction(convex_regression_loss, Optimization.AutoZygote()), [𝐚;𝐛], (x,y))
-@time ret = solve(prob, Adam(0.03), maxiters=1000)
-
-
-using Plots
-plot(x, y)
-plot!(x, summation_model(x, ret.u))
-
-## END

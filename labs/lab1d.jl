@@ -10,7 +10,7 @@
 
 # It is ideal for a course on Scientific Machine Learning (SciML)  because it both allows fast 
 # implementation of algorithms but also has support for fast automatic-differentiation, 
-# a feature that is of increasing importance in machine learning. 
+# a feature that is of importance in machine learning. 
 # Also, the libraries for solving differential equations and SciML are quite advanced.
 # As a bonus, it is easy-to-read and fun to write.
 
@@ -27,7 +27,7 @@
 # 5. Construction of a dense `Vector` or `Matrix` either directly or via comprehensions or broadcasting.
 
 # In what follows we need to use the testing package, which provides a macro called `@test`
-# that error whenever a test returns false. We load thisas follows:
+# that error whenever a test returns false. We load this as follows:
 
 using Test
 
@@ -389,15 +389,7 @@ end
 # Since `size([1,2,3],2) == 1` it repeats the same vector to match the size
 # `size([4,5]',2) == 2`. Similarly, `[4,5]'` is repeated 3 times. So the
 # above is equivalent to:
-
-A = [1 1;
-     2 2;
-     3 3] # same as [a a], i.e. repeat the vector a in each column
-B = [4 5;
-     4 5;
-     4 5] # same as [b'; b' b'], i.e. repeat the row vector b' in each row
-
-A .* B # equals the above a .* b'
+##
 
 # Note we can also use matrix broadcasting with our own functions:
 
@@ -410,22 +402,18 @@ A .* B # equals the above a .* b'
 # actually created in memory.
 # We have already seen that we can represent a range of integers via `a:b`. Note we can
 # convert it to a `Vector` as follows:
-
-Vector(2:6)
+##
 
 # We can also specify a step:
-
-Vector(2:2:6), Vector(6:-1:2)
+##
 
 # Finally, the `range` function gives more functionality, for example, we can create 4 evenly
 # spaced points between `-1` and `1`:
-
-Vector(range(-1, 1; length=4))
+##
 
 # Note that `Vector` is mutable but a range is not:
 
-r = 2:6
-r[2] = 3   # Not allowed
+##
 
 # Both ranges `Vector` are subtypes of `AbstractVector`, whilst `Matrix` is a subtype of `AbstractMatrix`.
 
@@ -440,22 +428,8 @@ r[2] = 3   # Not allowed
 # ### Linear algebra
 
 # Matrix-vector multiplication works as expected because `*` is overloaded:
-
-A = [1 2;
-     3 4;
-     5 6]
-x = [7, 8]
-A * x
-
+##
 # We can also solve least squares problems using `\`:
-
-b = randn(3)
-A \ b # finds x that minimises norm(A*x - b)
-
+##
 # When a matrix is square, `\` reduces to a linear solve.
-
-A = randn(5,5)
-b = randn(5)
-x = A \ b
-
-@test A*x ≈ b
+##

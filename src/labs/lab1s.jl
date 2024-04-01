@@ -580,7 +580,7 @@ a .* b'
 # Since `size([1,2,3],2) == 1` it repeats the same vector to match the size
 # `size([4,5]',2) == 2`. Similarly, `[4,5]'` is repeated 3 times. So the
 # above is equivalent to:
-
+## DEMO
 A = [1 1;
      2 2;
      3 3] # same as [a a], i.e. repeat the vector a in each column
@@ -589,6 +589,7 @@ B = [4 5;
      4 5] # same as [b'; b' b'], i.e. repeat the row vector b' in each row
 
 A .* B # equals the above a .* b'
+## END
 
 # Note we can also use matrix broadcasting with our own functions:
 
@@ -604,22 +605,27 @@ f.(a, b') # makes a matrix with entries [f(1,4) f(1,5); f(2,4) f(2,5); f(3,4) f(
 # actually created in memory.
 # We have already seen that we can represent a range of integers via `a:b`. Note we can
 # convert it to a `Vector` as follows:
-
+## DEMO
 Vector(2:6)
+## END
 
 # We can also specify a step:
-
+## DEMO
 Vector(2:2:6), Vector(6:-1:2)
+## END
 
 # Finally, the `range` function gives more functionality, for example, we can create 4 evenly
 # spaced points between `-1` and `1`:
-
+## DEMO
 Vector(range(-1, 1; length=4))
+## END
 
 # Note that `Vector` is mutable but a range is not:
 
+## DEMO
 r = 2:6
 r[2] = 3   # Not allowed
+## END
 
 # Both ranges `Vector` are subtypes of `AbstractVector`, whilst `Matrix` is a subtype of `AbstractMatrix`.
 
@@ -652,22 +658,23 @@ broadcast(k -> exp(-k), 1:5)
 # ### Linear algebra
 
 # Matrix-vector multiplication works as expected because `*` is overloaded:
-
+## DEMO
 A = [1 2;
      3 4;
      5 6]
 x = [7, 8]
 A * x
-
+## END
 # We can also solve least squares problems using `\`:
-
+## DEMO
 b = randn(3)
 A \ b # finds x that minimises norm(A*x - b)
-
+## END
 # When a matrix is square, `\` reduces to a linear solve.
-
+## DEMO
 A = randn(5,5)
 b = randn(5)
 x = A \ b
 
 @test A*x ≈ b
+## END

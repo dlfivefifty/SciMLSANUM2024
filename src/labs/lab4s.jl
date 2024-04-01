@@ -11,7 +11,9 @@
 # 2. Differentiating an ODE with respect to parameters or initial conditions.
 # 3. Solving simple nonlinear equations or optimisation problems involving paramters in an ODE.
 
+## DEMO
 using DifferentialEquations, Plots, LinearAlgebra, Test
+## END
 
 # ## 4.1 Solving ODEs with DifferentialEquations.jl
 
@@ -35,25 +37,31 @@ using DifferentialEquations, Plots, LinearAlgebra, Test
 # We can represent the right-hand side of this equation as a function that writes to a
 # `du` vector (thus avoiding allocations) as follows:
 
+## DEMO
 function pendulum_rhs!(du, 𝐮, τ, t)
     u,v = 𝐮
     du[1] = v
     du[2] = -sin(u) - τ*v
 end
+## END
 
 # Here `τ` plays the role of a parameter: for fast time-stepping its essential that we know the types
 # at compile time and hence its much better to pass in a parameter than refer to a global variable.
 # We can now construct a representation of the ODE problem as follows:
 
+## DEMO
 τ = 0.0 # no friction
 T = 10.0 # final time
 u₀, v₀ = 1,1 # initial conditions for poistion and velocity
 prob = ODEProblem(pendulum_rhs!, [u₀, v₀], (0.0, T), τ)
+## END
 
 # We can find the solution to the problem as follows:
 
+## DEMO
 sol = solve(prob)
 plot(sol)
+## END
 
 # DifferentialEquations.jl has many diferent time-steppers, eg, `Tsit5()` is 
 # an explicit Runge–Kutta method (a more efficient analogue of ode45 in Matlab).
@@ -61,8 +69,10 @@ plot(sol)
 # (even though they aren't needed here). Here's the same problem using an implicit method\
 # with tolerances specified:
 
+## DEMO
 sol = solve(prob, Rodas4(), abstol = 1e-10, reltol = 1e-10)
 plot(sol)
+## END
 
 # ------
 
@@ -100,7 +110,7 @@ plot(sol)
 # the pendulum is at the bottom (but not necessarily stationary). We can set this up as follows,
 # where for simplicity we hard-code the initial conditions as $[1,1]$:
 
-
+## DEMO
 function pendulum_friction(τ)
     T = 10.0 # final time
     u₀, v₀ = 1,1 # initial conditions
@@ -111,26 +121,32 @@ end
 pendulum_friction_stop(τ) = pendulum_friction(τ)[end][1] # find the value of u at the final time
 
 pendulum_friction_stop(0.1) # value at T = 10 with friction equal to 0.1
+## END
 
 # We can immediately differentiate with respect to `τ`:
 
+## DEMO
 using ForwardDiff
 ForwardDiff.derivative(pendulum_friction_stop, 0.1)
+## END
 
 # Behind the scenes this is running the time-stepper with dual numbers. We can use this in a simple newton iteration to, for example, find the friction
 # that results in a desired end conditon:
 
-
+## DEMO
 τ = 0.1
 for k = 1:10
     τ = τ - ForwardDiff.derivative(pendulum_friction_stop, τ) \ pendulum_friction_stop(τ)
 end
 τ, pendulum_friction_stop(τ)
+## END
 
 # We see that it has successed in finding one such friction so that we end 
 # up at the bottom at the final time:
 
+## DEMO
 plot(pendulum_friction(τ))
+## END
 
 # ------
 
@@ -194,7 +210,7 @@ plot(predatorprey(βγ))
 # Here is an example of computing the derivative. The catch is its more restrictive, in particular it requires that
 # the parameters are specified by a vector:
 
-
+## DEMO
 using Zygote, SciMLSensitivity
 
 function pendulum_rhs_zygote!(du, 𝐮, τv, t)
@@ -215,6 +231,7 @@ pendulum_friction_zygote_stop(τ) = pendulum_friction_zygote(τ)[end][1] # find 
 
 
 @test pendulum_friction_zygote_stop'(0.1) ≈ ForwardDiff.derivative(pendulum_friction_stop, 0.1)
+## END
 
 
 # Now one might ask: how is Zygote.jl computing the derivative with reverse-mode automatic differentiation
@@ -227,7 +244,7 @@ pendulum_friction_zygote_stop(τ) = pendulum_friction_zygote(τ)[end][1] # find 
 # compute gradients:
 
 
-
+## DEMO
 function pendulum_rhs_zygote!(du, 𝐮, τs, t)
     u,v = 𝐮
     τ = τs[max(1,ceil(Int, 10t))]
@@ -239,7 +256,7 @@ function pendulum_friction_vec(τs)
     T = 10.0 # final time
     u₀, v₀ = 1.0,1 # initial conditions
     prob = ODEProblem(pendulum_rhs_zygote!, [u₀, v₀], (0.0, T), τs)
-     solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
+    solve(prob, Vern9(), abstol = 1e-10, reltol = 1e-10) # Vern9 is an explicit Runge-Kutta method
 end
 
 ## We include an extra unused argument for parameters.
@@ -247,13 +264,15 @@ pendulum_friction_loss(τs, _) = norm(pendulum_friction_vec(τs)[end] .- 1) # fi
 
 ## We can compute the gradient
 @time gradient(pendulum_friction_loss, randn(100), ())
+## END
 
 # This can then be used an optimisation:
-
+## DEMO
 using Optimization, OptimizationOptimisers
 prob = OptimizationProblem(OptimizationFunction(pendulum_friction_loss, Optimization.AutoZygote()), randn(100), ())
 @time ret = solve(prob, Adam(0.03), maxiters=100)
 plot(pendulum_friction_vec(ret.u))
+## END
 
 
 # **Problem 4** For the predator-prey model, Choose $α,β,γ,δ$ to try to minimize the 2-norm of $x(t) - 1$ evaluated at
