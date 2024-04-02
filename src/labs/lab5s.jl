@@ -58,7 +58,7 @@ val,newst = model(x, (weight=A, bias=b), NOSTATE) # returns the output of the ma
 # which Lux.jl uses for representing paramaters:
 
 ## DEMO
-ps = (weight=A, bias=b) # parameters as a NamedTuple
+ps = (weight=A, bias=b) # parameters as a NamedTuple, almost like an anonymous type
 ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named tuple containing the gradients
 ## END
 
@@ -66,8 +66,8 @@ ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named t
 # respect to $A[k,j]$ will just be $x[j]$ and the derivative with respect to $b[k]$ will just be $1$. Thus we get:
 
 ## DEMO
-@test ps_grad[:weight] ≈ ones(5) * x'
-@test ps_grad[:bias] ≈ ones(5)
+@test ps_grad.weight ≈ ones(5) * x'
+@test ps_grad.bias ≈ ones(5)
 ## END
 
 
@@ -108,8 +108,8 @@ ps_grad = gradient(p -> sum(model(x, p, NOSTATE)[1]), ps)[1] # returns a named t
 ## We just need to filter by the sign of the output:
 s = (1 .+ sign.(A*x + b))/2
 
-@test ps_grad[:weight] ≈ s * x'
-@test ps_grad[:bias] ≈ s
+@test ps_grad.weight ≈ s * x'
+@test ps_grad.bias ≈ s
 
 ## END
 
